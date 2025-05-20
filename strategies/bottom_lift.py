@@ -1,76 +1,101 @@
+# File: strategies/bottom_lift.py
 import pandas as pd
+import numpy as np
 import pytz
-from datetime import timedelta
-from utils import TZ
 from db import engine_ohlcv
-from sqlalchemy import text
 
-def analyze_bottom_lift(t1, t2, factor=100):
+
+def analyze_bottom_lift(t1, t2, bars: int = 4, factor: float = 100.0) -> pd.DataFrame:
     """
-    t1, t2: naive datetime in Asia/Shanghai
-    factor: 放大因子，默认 100
+    在两个时间点 t1, t2 周围各 ± bars 根 15 分钟 K 线窗口内计算最低价，
+    并根据放大因子计算对数收益斜率。
 
-    在 t1、t2 各 ±1 小时窗口内，分别取 min low 值 L1 和 L2，
-    计算斜率 = (L2 - L1) * factor，返回按斜率降序排序。
-    同时输出 L1_time, L1_low, L2_time, L2_low。
+    假设 ohlcv.time 列为 Unix 时间戳（毫秒），存储于 bigint 类型。
+
+    参数：
+    - t1, t2: datetime 对象（本地化时区 Asia/Shanghai）
+    - bars: 窗口大小，以 K 线根数计（每根 15 分钟）
+    - factor: 放大因子，用于将对数收益乘以此数，以便更直观地展示
+
+    返回：
+    - DataFrame，索引为 symbol，列为 L1_time, L1_low, L2_time, L2_low, slope
+      其中 L1_time、L2_time 已转换为 Asia/Shanghai 时区的 datetime，
+      slope 表示对数收益 ln(L2_low / L1_low) * factor
     """
-    # 本地化到上海时区
-    t1_local = TZ.localize(t1)
-    t2_local = TZ.localize(t2)
+    # 本地化时区
+    tz = pytz.timezone("Asia/Shanghai")
+    if t1.tzinfo is None:
+        t1 = tz.localize(t1)
+    if t2.tzinfo is None:
+        t2 = tz.localize(t2)
 
-    # 窗口 ±1h
-    start1 = t1_local - timedelta(hours=1)
-    end1   = t1_local + timedelta(hours=1)
-    start2 = t2_local - timedelta(hours=1)
-    end2   = t2_local + timedelta(hours=1)
+    # 时间窗口偏移
+    window = pd.Timedelta(minutes=15 * bars)
+    t1_start, t1_end = t1 - window, t1 + window
+    t2_start, t2_end = t2 - window, t2 + window
 
-    # 转 UTC ms 时间戳
-    start1_ms = int(start1.astimezone(pytz.utc).timestamp() * 1000)
-    end1_ms   = int(end1.astimezone(pytz.utc).timestamp() * 1000)
-    start2_ms = int(start2.astimezone(pytz.utc).timestamp() * 1000)
-    end2_ms   = int(end2.astimezone(pytz.utc).timestamp() * 1000)
+    # 转为 Unix 毫秒时间戳
+    t1_start_ts = int(t1_start.timestamp() * 1000)
+    t1_end_ts = int(t1_end.timestamp() * 1000)
+    t2_start_ts = int(t2_start.timestamp() * 1000)
+    t2_end_ts = int(t2_end.timestamp() * 1000)
 
-    # 获取所有 symbol
-    with engine_ohlcv.connect() as conn:
-        symbols = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+    # 获取所有交易符号
+    instruments_sql = "SELECT instrument_id AS symbol FROM instruments"
+    instruments = pd.read_sql(instruments_sql, engine_ohlcv)
+    symbols = instruments['symbol'].tolist()
 
     records = []
-    for s in symbols:
-        with engine_ohlcv.connect() as conn:
-            df1 = pd.read_sql(
-                text("SELECT time, low FROM ohlcv WHERE symbol=:s AND time BETWEEN :a AND :b"),
-                conn,
-                params={"s": s, "a": start1_ms, "b": end1_ms},
-            )
-            df2 = pd.read_sql(
-                text("SELECT time, low FROM ohlcv WHERE symbol=:s AND time BETWEEN :a AND :b"),
-                conn,
-                params={"s": s, "a": start2_ms, "b": end2_ms},
-            )
-        if df1.empty or df2.empty:
+    # 统一 SQL 模板，使用时间戳比较
+    sql = (
+        "SELECT time, low FROM ohlcv "
+        "WHERE symbol = %(sym)s AND time BETWEEN %(start_ts)s AND %(end_ts)s"
+    )
+
+    for sym in symbols:
+        # 查询 t1 窗口
+        df1 = pd.read_sql(sql, engine_ohlcv, params={
+            'sym': sym,
+            'start_ts': t1_start_ts,
+            'end_ts': t1_end_ts
+        })
+        if df1.empty:
             continue
+        l1 = df1.loc[df1['low'].idxmin()]
+        # 转换 L1_time 为 Asia/Shanghai 时区 datetime
+        L1_time = pd.to_datetime(l1['time'], unit='ms', utc=True).tz_convert('Asia/Shanghai')
+        L1_low = l1['low']
 
-        idx1 = df1["low"].idxmin()
-        idx2 = df2["low"].idxmin()
-        L1_time_ms = df1.at[idx1, "time"]
-        L1_low     = df1.at[idx1, "low"]
-        L2_time_ms = df2.at[idx2, "time"]
-        L2_low     = df2.at[idx2, "low"]
+        # 查询 t2 窗口
+        df2 = pd.read_sql(sql, engine_ohlcv, params={
+            'sym': sym,
+            'start_ts': t2_start_ts,
+            'end_ts': t2_end_ts
+        })
+        if df2.empty:
+            continue
+        l2 = df2.loc[df2['low'].idxmin()]
+        # 转换 L2_time 为 Asia/Shanghai 时区 datetime
+        L2_time = pd.to_datetime(l2['time'], unit='ms', utc=True).tz_convert('Asia/Shanghai')
+        L2_low = l2['low']
 
-        slope = (L2_low - L1_low) * factor
-
-        # 转换回本地时区 datetime
-        L1_time = pd.to_datetime(L1_time_ms, unit="ms").tz_localize('UTC').tz_convert(TZ)
-        L2_time = pd.to_datetime(L2_time_ms, unit="ms").tz_localize('UTC').tz_convert(TZ)
+        # 计算对数收益斜率：ln(L2_low / L1_low) * factor
+        if L1_low > 0:
+            slope = np.log(L2_low / L1_low) * factor
+        else:
+            slope = None
 
         records.append({
-            "symbol":   s,
-            "L1_time":  L1_time,
-            "L1_low":   L1_low,
-            "L2_time":  L2_time,
-            "L2_low":   L2_low,
-            "slope":    slope,
+            'symbol': sym,
+            'L1_time': L1_time,
+            'L1_low': L1_low,
+            'L2_time': L2_time,
+            'L2_low': L2_low,
+            'slope': slope
         })
 
-    df = pd.DataFrame(records).set_index("symbol")
-    return df.sort_values("slope", ascending=False)
+    result = pd.DataFrame(records)
+    if not result.empty:
+        result.set_index('symbol', inplace=True)
+    return result
+

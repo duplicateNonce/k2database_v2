@@ -5,6 +5,8 @@ from pages.metrics_editor import render_metrics_editor
 from pages.ohlcv import render_ohlcv_page
 from pages.strong_assets import render_strong_assets_page
 from pages.bottom_lift import render_bottom_lift_page
+from pages.long_short_analysis import render_long_short_analysis_page
+from pages.label_assets import render_label_assets_page
 
 PAGES = {
     "Overview": render_overview,
@@ -14,6 +16,10 @@ PAGES = {
     "Strong Assets": render_strong_assets_page,
     "Bottom Lift": render_bottom_lift_page,
 }
+
+PAGES["Long/Short Analysis"] = render_long_short_analysis_page
+PAGES["Label Assets"] = render_label_assets_page
+
 
 def main():
     st.set_page_config(page_title="K2Database Monitor", layout="wide")

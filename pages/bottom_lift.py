@@ -1,22 +1,26 @@
 import streamlit as st
-from datetime import datetime, time, timedelta
+from datetime import datetime
 from strategies.bottom_lift import analyze_bottom_lift
 
 
 def render_bottom_lift_page():
-    st.header("底部抬升检测")
+    st.title("Bottom Lift 分析")
 
-    t1_date = st.date_input("第一时间点日期", value=datetime.now().date())
-    t1_time = st.time_input("第一时间点时间", value=time(0,0), key="bl_t1_time")
-    t2_date = st.date_input("第二时间点日期", value=datetime.now().date())
-    t2_time = st.time_input("第二时间点时间", value=time(0,0), key="bl_t2_time")
-    factor = st.number_input("放大因子", min_value=1.0, value=100.0)
+    # 布局：左右两栏输入时间点
+    col1, col2 = st.columns(2)
+    with col1:
+        t1_date = st.date_input("T1 日期", key="t1_date")
+        t1_time = st.time_input("T1 时间", key="t1_time")
+    with col2:
+        t2_date = st.date_input("T2 日期", key="t2_date")
+        t2_time = st.time_input("T2 时间", key="t2_time")
 
-    if st.button("执行检测", key="bl_btn"):
-        dt1 = datetime.combine(t1_date, t1_time)
-        dt2 = datetime.combine(t2_date, t2_time)
-        df = analyze_bottom_lift(dt1, dt2, factor)
-        if df.empty:
-            st.warning("无可用数据")
-        else:
-            st.dataframe(df)
+    # 可调参数：bars 和 factor
+    bars = st.number_input("± N 根 K 线 (bars)", min_value=1, value=4, step=1)
+    factor = st.number_input("放大因子 (factor)", min_value=1.0, value=100.0, step=1.0)
+
+    if st.button("运行分析"):
+        t1 = datetime.combine(t1_date, t1_time)
+        t2 = datetime.combine(t2_date, t2_time)
+        df = analyze_bottom_lift(t1, t2, bars=bars, factor=factor)
+        st.dataframe(df)
