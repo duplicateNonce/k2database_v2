@@ -1,68 +1,71 @@
 import pandas as pd
 from sqlalchemy import text
-from db import engine_ohlcv
+from db import engine_ohlcv      # 使用项目中的 db 连接引擎
 from config import TZ_NAME
-from datetime import timezone as dt_timezone, timedelta
 
-def analyze_strong_assets(benchmark: str, start_ts: int, end_ts: int, agg: int) -> pd.DataFrame:
-    # 1. 获取全量 symbol
+def compute_period_metrics(symbol: str,
+                           start_ts: int,
+                           end_ts: int) -> dict:
+    """
+    计算单个交易对在 [start_ts, end_ts] 区间内基于原始 15 分钟 OHLCV 的指标：
+      1) 期间收益率 = (最后一条 close / 第一条 close) - 1
+      2) 区间内最高 close 及其北京时间；最低 close 及其北京时间
+      3) 回调比例 = (最高 close 后的最低 close - 最高 close) / 最高 close
+    """
+    # 1. 拉取 close 数据
     with engine_ohlcv.connect() as conn:
-        symbols = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
-
-    if not symbols:
-        return pd.DataFrame()
-
-    # 2. 批量拉取 OHLCV
-    with engine_ohlcv.connect() as conn:
-        sql = text("""
-            SELECT symbol, time, open, high, low, close, volume_usd
+        df = pd.read_sql(text("""
+            SELECT time, close
             FROM ohlcv
-            WHERE symbol = ANY(:symbols) AND time BETWEEN :start AND :end
-            ORDER BY symbol, time
-        """)
-        df = pd.read_sql(sql, conn, params={
-            "symbols": symbols,
-            "start": start_ts,
-            "end": end_ts
+            WHERE symbol = :symbol
+              AND time BETWEEN :start AND :end
+            ORDER BY time
+        """), conn, params={
+            "symbol": symbol,
+            "start":  start_ts,
+            "end":    end_ts,
         })
 
-    # 3. 时间戳转换 & 本地化
-    df["time"] = (
-        pd.to_datetime(df["time"], unit="ms")
-          .dt.tz_localize("UTC")
+    if df.empty:
+        raise ValueError(f"{symbol} 在指定区间无数据")
+
+    # 2. 时区转换
+    df['dt'] = (
+        pd.to_datetime(df['time'], unit='ms', utc=True)
           .dt.tz_convert(TZ_NAME)
     )
-    df = df.set_index("time")
+    df = df.reset_index(drop=True)
 
-    # 4. 按 symbol+agg 分组聚合
-    ohlc_dict = {
-        "open": "first", "high": "max", "low": "min",
-        "close": "last", "volume_usd": "sum"
+    # 3. 首尾收盘价 & 期间收益率
+    first_close = df.at[0, 'close']
+    last_close = df.at[len(df)-1, 'close']
+    period_return = last_close / first_close - 1
+
+    # 4. 区间峰值及峰值后最低点
+    # 找到峰值位置
+    peak_idx = df['close'].idxmax()
+    peak_close = df.at[peak_idx, 'close']
+    peak_dt = df.at[peak_idx, 'dt']
+    # 在峰值之后的数据里找最低
+    if peak_idx < len(df) - 1:
+        trough_df = df.iloc[peak_idx+1:]
+        trough_idx = trough_df['close'].idxmin()
+    else:
+        # 如果峰值是最后一条，回调为0，最低点即峰值
+        trough_idx = peak_idx
+    trough_close = df.at[trough_idx, 'close']
+    trough_dt = df.at[trough_idx, 'dt']
+
+    # 5. 回调比例 = (peak - trough) / peak
+    drawdown = (peak_close - trough_close) / peak_close if peak_close else 0
+
+    return {
+        "first_close": first_close,
+        "last_close": last_close,
+        "period_return": period_return,
+        "max_close": peak_close,
+        "max_close_dt": peak_dt,
+        "min_close": trough_close,
+        "min_close_dt": trough_dt,
+        "drawdown": drawdown,
     }
-    df_agg = (
-        df.groupby("symbol")
-          .resample(f"{agg*15}min")
-          .apply(ohlc_dict)
-          .dropna()
-    )
-
-    # 5. 计算超额收益与信息比率
-    returns = df_agg["close"].groupby("symbol").pct_change().dropna()
-    # 基准资产的收益序列
-    bench_ret_series = returns.loc[benchmark]
-    # 超额收益
-    excess_ret = returns.sub(bench_ret_series, axis=0)
-    # 累计收益 & 超额累计收益 & IR
-    cum_ret         = returns.groupby("symbol").sum()
-    excess_cum_ret  = excess_ret.groupby("symbol").sum()
-    ir              = excess_ret.groupby("symbol").mean() / excess_ret.groupby("symbol").std()
-
-    # 6. 组织结果表
-    results = pd.DataFrame({
-        "cum_ret (%)":         (cum_ret * 100).round(2),
-        "excess_cum_ret (%)":  (excess_cum_ret * 100).round(2),
-        "IR":                  ir.round(4),
-    })
-
-    # 7. 按累计收益降序返回
-    return results.sort_values("cum_ret (%)", ascending=False)
