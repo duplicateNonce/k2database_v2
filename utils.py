@@ -53,3 +53,11 @@ def short_time_range(d1: str, t1: str, d2: str, t2: str) -> str:
         return f"{dt1.month}.{dt1.day} {dt1.strftime('%H:%M')} - {dt2.month}.{dt2.day} {dt2.strftime('%H:%M')}"
     except Exception:
         return ""
+
+
+def update_shared_range(start_date, start_time, end_date, end_time) -> None:
+    """Store a time range in session state for cross-page reuse."""
+    st.session_state["range_start_date"] = start_date
+    st.session_state["range_start_time"] = start_time
+    st.session_state["range_end_date"] = end_date
+    st.session_state["range_end_time"] = end_time
