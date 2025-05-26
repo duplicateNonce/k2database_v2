@@ -5,6 +5,7 @@ from db import engine_ohlcv
 from strategies.bottom_lift import analyze_bottom_lift
 import pandas as pd
 from query_history import add_entry, get_history
+from utils import safe_rerun, short_time_range
 
 
 def render_bottom_lift_page():
@@ -14,15 +15,28 @@ def render_bottom_lift_page():
     history = get_history("bottom_lift")
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
-            labels = [h["time"] for h in history]
-            idx = st.selectbox("选择记录", range(len(history)), format_func=lambda i: labels[i], key="bl_hist_select")
+            labels = [
+                short_time_range(
+                    h["params"]["t1_date"],
+                    h["params"]["t1_time"],
+                    h["params"]["t2_date"],
+                    h["params"]["t2_time"],
+                )
+                for h in history
+            ]
+            idx = st.selectbox(
+                "选择记录",
+                range(len(history)),
+                format_func=lambda i: labels[i],
+                key="bl_hist_select",
+            )
             if st.button("载入历史", key="bl_hist_load"):
                 params = history[idx]["params"]
                 st.session_state["t1_date"] = date.fromisoformat(params["t1_date"])
                 st.session_state["t1_time"] = time.fromisoformat(params["t1_time"])
                 st.session_state["t2_date"] = date.fromisoformat(params["t2_date"])
                 st.session_state["t2_time"] = time.fromisoformat(params["t2_time"])
-                st.experimental_rerun()
+                safe_rerun()
         else:
             st.write("暂无历史记录")
 

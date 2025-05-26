@@ -4,6 +4,7 @@ from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
 from query_history import add_entry, get_history
+from utils import safe_rerun, short_time_range
 import pandas as pd
 
 def render_strong_assets_page():
@@ -13,15 +14,28 @@ def render_strong_assets_page():
     history = get_history("strong_assets")
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
-            labels = [h["time"] for h in history]
-            idx = st.selectbox("选择记录", range(len(history)), format_func=lambda i: labels[i], key="sa_hist_select")
+            labels = [
+                short_time_range(
+                    h["params"]["start_date"],
+                    h["params"]["start_time"],
+                    h["params"]["end_date"],
+                    h["params"]["end_time"],
+                )
+                for h in history
+            ]
+            idx = st.selectbox(
+                "选择记录",
+                range(len(history)),
+                format_func=lambda i: labels[i],
+                key="sa_hist_select",
+            )
             if st.button("载入历史", key="sa_hist_load"):
                 params = history[idx]["params"]
                 st.session_state["sa_start_date"] = date.fromisoformat(params["start_date"])
                 st.session_state["sa_start_time"] = time.fromisoformat(params["start_time"])
                 st.session_state["sa_end_date"] = date.fromisoformat(params["end_date"])
                 st.session_state["sa_end_time"] = time.fromisoformat(params["end_time"])
-                st.experimental_rerun()
+                safe_rerun()
         else:
             st.write("暂无历史记录")
 
