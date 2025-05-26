@@ -17,6 +17,9 @@ from pages.watchlist import render_watchlist_page
 # 使用 codex 分支中新加的登录凭证和 rerun 工具
 from config import USER_CREDENTIALS
 from utils import safe_rerun
+import json
+from uuid import uuid4
+from pathlib import Path
 
 PAGES = {
     "Overview": render_overview,
@@ -37,8 +40,36 @@ PAGES = {
 PAGES["Long/Short Analysis"] = render_long_short_analysis_page
 PAGES["Label Assets"] = render_label_assets_page
 
+FINGERPRINT_FILE = Path("data/fingerprints.json")
+
+
+def load_fingerprints() -> dict:
+    if FINGERPRINT_FILE.exists():
+        try:
+            return json.loads(FINGERPRINT_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def save_fingerprints(fp_dict: dict) -> None:
+    FINGERPRINT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    FINGERPRINT_FILE.write_text(json.dumps(fp_dict))
+
 def require_login() -> bool:
-    """Simple login based on USER_CREDENTIALS."""
+    """Login with optional fingerprint auto-login."""
+
+    # Try automatic login via fingerprint in query params
+    params = st.experimental_get_query_params()
+    fp_param = params.get("fp", [None])[0]
+    fingerprints = load_fingerprints()
+    if fp_param:
+        for name, fp in fingerprints.items():
+            if fp == fp_param:
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = name
+                return True
+
     if st.session_state.get("logged_in"):
         return True
 
@@ -47,6 +78,15 @@ def require_login() -> bool:
     p = st.text_input("密码", type="password")
     if st.button("登录"):
         if USER_CREDENTIALS.get(u) == p:
+            existing_fp = fingerprints.get(u)
+            if existing_fp and existing_fp != fp_param:
+                st.error("ERROR 01")
+                return False
+            if not existing_fp:
+                fp_param = fp_param or uuid4().hex
+                fingerprints[u] = fp_param
+                save_fingerprints(fingerprints)
+                st.experimental_set_query_params(fp=fp_param)
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             safe_rerun()

@@ -5,6 +5,7 @@ from datetime import datetime, date, time, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
+from utils import safe_rerun
 from sqlalchemy import text
 
 from db import engine_ohlcv
@@ -81,8 +82,6 @@ def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
 
 
 def find_cross_times(dates: pd.Series, macd_line: pd.Series, signal_line: pd.Series):
-    golden = []
-    death = []
     cond_g = (macd_line.shift(1) <= signal_line.shift(1)) & (macd_line > signal_line)
     cond_d = (macd_line.shift(1) >= signal_line.shift(1)) & (macd_line < signal_line)
     golden = dates[cond_g.fillna(False)].dt.strftime("%m-%d %H:%M").tolist()
@@ -104,13 +103,13 @@ def render_watchlist_page():
                 watchlist.append(add_sym)
                 save_watchlist(watchlist)
                 st.success(f"已添加 {add_sym}")
-                st.experimental_rerun()
+                safe_rerun()
         if watchlist:
             for sym in watchlist:
                 if st.button(f"删除 {sym}", key=f"del_{sym}"):
                     watchlist.remove(sym)
                     save_watchlist(watchlist)
-                    st.experimental_rerun()
+                    safe_rerun()
         else:
             st.write("暂无自选标的")
 
@@ -197,4 +196,3 @@ def render_watchlist_page():
         for sym, ch in charts.items():
             st.subheader(sym)
             st.line_chart(ch.set_index("dt"))
-
