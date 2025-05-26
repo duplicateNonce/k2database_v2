@@ -11,7 +11,8 @@ def render_strong_assets_page():
     st.header("区间收益 & 回调 列表（所有资产）")
 
     # —— 历史记录侧边栏 ——
-    history = get_history("strong_assets")
+    user = st.session_state.get("username", "default")
+    history = get_history("strong_assets", user)
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
             labels = [
@@ -65,7 +66,7 @@ def render_strong_assets_page():
         end_ts = int(end_dt.timestamp() * 1000)
 
         # 记录查询参数
-        add_entry("strong_assets", {
+        add_entry("strong_assets", user, {
             "start_date": start_date.isoformat(),
             "start_time": start_time.isoformat(),
             "end_date": end_date.isoformat(),

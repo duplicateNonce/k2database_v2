@@ -18,3 +18,7 @@ CG_API_KEY = os.getenv("CG_API_KEY")
 
 # 时区常量
 TZ_NAME = "Asia/Shanghai"
+
+# 登录凭据（从环境变量读取）
+APP_USER = os.getenv("APP_USER", "")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
