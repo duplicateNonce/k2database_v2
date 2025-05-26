@@ -7,7 +7,9 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def get_conn():
     """
@@ -181,7 +183,10 @@ def render_hyperliquid_whale_page():
     st_autorefresh(interval=5_000, key="hyperliquid_refresh")
 
     # 拉取并存储数据
-    api_key = os.getenv('CG_API_KEY', '14ea99a0b48244d8a3761a7277c51401')
+    api_key = os.getenv('CG_API_KEY')
+    if not api_key:
+        st.error('未配置 CG_API_KEY')
+        return
     records = fetch_hyperliquid_data(api_key)
     update_database(conn, records)
 
