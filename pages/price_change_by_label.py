@@ -37,22 +37,38 @@ def get_mappings():
 def compute_period_metrics(symbol, start_ts, end_ts):
     try:
         with engine_ohlcv.connect() as conn:
-            df = pd.read_sql(text("""
-                SELECT time, close
-                  FROM ohlcv
-                 WHERE symbol = :symbol
-                   AND time BETWEEN :start AND :end
-                 ORDER BY time
-            """), conn, params={"symbol":symbol,"start":start_ts,"end":end_ts})
-        if df.empty: return None, None
-        first, last = df['close'].iat[0], df['close'].iat[-1]
-        ret = last/first - 1 if first else None
-        peak_idx = df['close'].idxmax()
-        peak = df.at[peak_idx,'close']
-        trough = df.iloc[peak_idx+1:]['close'].min() if peak_idx < len(df)-1 else peak
-        dd = (peak-trough)/peak if peak else None
+            df = pd.read_sql(
+                text(
+                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
+                    "WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
+                ),
+                conn,
+                params={"symbol": symbol, "start": start_ts, "end": end_ts},
+            )
+
+        if df.empty:
+            return None, None
+
+        df['dt'] = pd.to_datetime(df['time'], unit='ms', utc=True)
+        df = df.set_index('dt').sort_index()
+        counts = df['open'].resample('4H').count()
+        complete = counts[counts == 16].index
+        if complete.empty:
+            return None, None
+        o = df['open'].resample('4H').first().loc[complete]
+        c = df['close'].resample('4H').last().loc[complete]
+        h = df['high'].resample('4H').max().loc[complete]
+        l = df['low'].resample('4H').min().loc[complete]
+        v = df['volume_usd'].resample('4H').sum().loc[complete]
+        agg = pd.DataFrame({'open': o, 'high': h, 'low': l, 'close': c, 'volume_usd': v})
+        first_o = agg['open'].iat[0]
+        last_c = agg['close'].iat[-1]
+        ret = last_c / first_o - 1 if first_o else None
+        peak = agg['high'].max()
+        trough = agg['low'].min()
+        dd = (peak - trough) / peak if peak else None
         return ret, dd
-    except:
+    except Exception:
         return None, None
 
 def render_price_change_by_label():
