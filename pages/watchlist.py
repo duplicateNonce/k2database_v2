@@ -82,8 +82,6 @@ def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
 
 
 def find_cross_times(dates: pd.Series, macd_line: pd.Series, signal_line: pd.Series):
-    golden = []
-    death = []
     cond_g = (macd_line.shift(1) <= signal_line.shift(1)) & (macd_line > signal_line)
     cond_d = (macd_line.shift(1) >= signal_line.shift(1)) & (macd_line < signal_line)
     golden = dates[cond_g.fillna(False)].dt.strftime("%m-%d %H:%M").tolist()
@@ -198,4 +196,3 @@ def render_watchlist_page():
         for sym, ch in charts.items():
             st.subheader(sym)
             st.line_chart(ch.set_index("dt"))
-
