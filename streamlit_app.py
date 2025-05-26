@@ -12,6 +12,8 @@ from pages.hyperliquid_whale import render_hyperliquid_whale_page
 from pages.price_change_ranking import render_price_change_page
 from pages.price_change_by_label import render_price_change_by_label
 from pages.monitor import render_monitor
+
+# 使用 codex 分支中新加的登录凭证和 rerun 工具
 from config import USER_CREDENTIALS
 from utils import safe_rerun
 
@@ -23,16 +25,14 @@ PAGES = {
     "Strong Assets": render_strong_assets_page,
     "Bottom Lift": render_bottom_lift_page,
     "涨跌幅排行榜": render_price_change_page,
-    "RSI Data": rsi_data.render_rsi_data_page, 
+    "RSI Data": rsi_data.render_rsi_data_page,
     "Hyperliquid 鲸鱼监控": render_hyperliquid_whale_page,
-    "标签化涨跌幅": render_price_change_page,
-    "强势标的监控": render_monitor
+    "标签化涨跌幅": render_price_change_by_label,
+    "强势标的监控": render_monitor,
 }
-
+# 动态添加
 PAGES["Long/Short Analysis"] = render_long_short_analysis_page
 PAGES["Label Assets"] = render_label_assets_page
-PAGES["价格&标签指标"] = render_price_change_by_label
-
 
 def require_login() -> bool:
     """Simple login based on USER_CREDENTIALS."""
