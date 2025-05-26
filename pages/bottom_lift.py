@@ -5,7 +5,7 @@ from db import engine_ohlcv
 from strategies.bottom_lift import analyze_bottom_lift
 import pandas as pd
 from query_history import add_entry, get_history
-from utils import safe_rerun, short_time_range
+from utils import safe_rerun, short_time_range, update_shared_range
 
 
 def render_bottom_lift_page():
@@ -14,6 +14,16 @@ def render_bottom_lift_page():
     # —— 历史记录 ——
     user = st.session_state.get("username", "default")
     history = get_history("bottom_lift", user)
+
+    # 如果有共享时间范围，则作为默认值
+    if "range_start_date" in st.session_state:
+        st.session_state.setdefault("t1_date", st.session_state["range_start_date"])
+    if "range_start_time" in st.session_state:
+        st.session_state.setdefault("t1_time", st.session_state["range_start_time"])
+    if "range_end_date" in st.session_state:
+        st.session_state.setdefault("t2_date", st.session_state["range_end_date"])
+    if "range_end_time" in st.session_state:
+        st.session_state.setdefault("t2_time", st.session_state["range_end_time"])
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
             labels = [
@@ -37,6 +47,12 @@ def render_bottom_lift_page():
                 st.session_state["t1_time"] = time.fromisoformat(params["t1_time"])
                 st.session_state["t2_date"] = date.fromisoformat(params["t2_date"])
                 st.session_state["t2_time"] = time.fromisoformat(params["t2_time"])
+                update_shared_range(
+                    st.session_state["t1_date"],
+                    st.session_state["t1_time"],
+                    st.session_state["t2_date"],
+                    st.session_state["t2_time"],
+                )
                 safe_rerun()
         else:
             st.write("暂无历史记录")
@@ -66,6 +82,7 @@ def render_bottom_lift_page():
             "t2_date": t2_date.isoformat(),
             "t2_time": t2_time.isoformat(),
         })
+        update_shared_range(t1_date, t1_time, t2_date, t2_time)
 
         # 执行分析
         df = analyze_bottom_lift(t1, t2, bars=bars, factor=factor)

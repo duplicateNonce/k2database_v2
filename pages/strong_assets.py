@@ -4,7 +4,7 @@ from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
 from query_history import add_entry, get_history
-from utils import safe_rerun, short_time_range
+from utils import safe_rerun, short_time_range, update_shared_range
 import pandas as pd
 
 def render_strong_assets_page():
@@ -13,6 +13,16 @@ def render_strong_assets_page():
     # —— 历史记录侧边栏 ——
     user = st.session_state.get("username", "default")
     history = get_history("strong_assets", user)
+
+    # 如果有共享时间范围，则作为默认值
+    if "range_start_date" in st.session_state:
+        st.session_state.setdefault("sa_start_date", st.session_state["range_start_date"])
+    if "range_start_time" in st.session_state:
+        st.session_state.setdefault("sa_start_time", st.session_state["range_start_time"])
+    if "range_end_date" in st.session_state:
+        st.session_state.setdefault("sa_end_date", st.session_state["range_end_date"])
+    if "range_end_time" in st.session_state:
+        st.session_state.setdefault("sa_end_time", st.session_state["range_end_time"])
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
             labels = [
@@ -36,6 +46,12 @@ def render_strong_assets_page():
                 st.session_state["sa_start_time"] = time.fromisoformat(params["start_time"])
                 st.session_state["sa_end_date"] = date.fromisoformat(params["end_date"])
                 st.session_state["sa_end_time"] = time.fromisoformat(params["end_time"])
+                update_shared_range(
+                    st.session_state["sa_start_date"],
+                    st.session_state["sa_start_time"],
+                    st.session_state["sa_end_date"],
+                    st.session_state["sa_end_time"],
+                )
                 safe_rerun()
         else:
             st.write("暂无历史记录")
@@ -57,7 +73,7 @@ def render_strong_assets_page():
             "结束时间", time(23, 59), key="sa_end_time"
         )
 
-    if st.button("计算区间指标", key="sa_btn"): 
+    if st.button("计算区间指标", key="sa_btn"):
         # 合并日期时间并转毫秒，内部计算使用 UTC+8 时区
         tz = dt_timezone(timedelta(hours=8))
         start_dt = datetime.combine(start_date, start_time).replace(tzinfo=tz)
@@ -72,6 +88,7 @@ def render_strong_assets_page():
             "end_date": end_date.isoformat(),
             "end_time": end_time.isoformat(),
         })
+        update_shared_range(start_date, start_time, end_date, end_time)
 
         # 拉取所有 symbol 及对应标签
         with engine_ohlcv.connect() as conn:
