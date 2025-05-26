@@ -12,7 +12,8 @@ def render_bottom_lift_page():
     st.title("Bottom Lift 分析")
 
     # —— 历史记录 ——
-    history = get_history("bottom_lift")
+    user = st.session_state.get("username", "default")
+    history = get_history("bottom_lift", user)
     with st.sidebar.expander("历史记录", expanded=False):
         if history:
             labels = [
@@ -59,7 +60,7 @@ def render_bottom_lift_page():
         t1 = datetime.combine(t1_date, t1_time).replace(tzinfo=tz)
         t2 = datetime.combine(t2_date, t2_time).replace(tzinfo=tz)
 
-        add_entry("bottom_lift", {
+        add_entry("bottom_lift", user, {
             "t1_date": t1_date.isoformat(),
             "t1_time": t1_time.isoformat(),
             "t2_date": t2_date.isoformat(),

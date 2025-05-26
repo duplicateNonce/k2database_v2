@@ -12,6 +12,8 @@ from pages.hyperliquid_whale import render_hyperliquid_whale_page
 from pages.price_change_ranking import render_price_change_page
 from pages.price_change_by_label import render_price_change_by_label
 from pages.monitor import render_monitor
+from config import USER_CREDENTIALS
+from utils import safe_rerun
 
 PAGES = {
     "Overview": render_overview,
@@ -31,8 +33,33 @@ PAGES["Long/Short Analysis"] = render_long_short_analysis_page
 PAGES["Label Assets"] = render_label_assets_page
 PAGES["价格&标签指标"] = render_price_change_by_label
 
+
+def require_login() -> bool:
+    """Simple login based on USER_CREDENTIALS."""
+    if st.session_state.get("logged_in"):
+        return True
+
+    st.title("登录")
+    u = st.text_input("用户名")
+    p = st.text_input("密码", type="password")
+    if st.button("登录"):
+        if USER_CREDENTIALS.get(u) == p:
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = u
+            safe_rerun()
+        else:
+            st.error("用户名或密码错误")
+    return False
+
 def main():
     st.set_page_config(page_title="K2Database Monitor", layout="wide")
+    if not require_login():
+        return
+
+    if st.sidebar.button("退出登录"):
+        st.session_state.clear()
+        safe_rerun()
+
     choice = st.sidebar.radio("选择页面", list(PAGES.keys()))
     PAGES[choice]()
 

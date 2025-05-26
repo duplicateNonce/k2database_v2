@@ -18,3 +18,18 @@ CG_API_KEY = os.getenv("CG_API_KEY")
 
 # 时区常量
 TZ_NAME = "Asia/Shanghai"
+
+# 登录凭据（从环境变量读取）
+# 支持在 APP_USERS 中使用 "user:pass" 列表，逗号分隔
+_multi = os.getenv("APP_USERS")
+if _multi:
+    USER_CREDENTIALS = {}
+    for pair in _multi.split(','):
+        if ':' in pair:
+            u, p = pair.split(':', 1)
+            USER_CREDENTIALS[u] = p
+else:
+    u = os.getenv("APP_USER", "")
+    p = os.getenv("APP_PASSWORD", "")
+    USER_CREDENTIALS = {u: p} if u else {}
+
