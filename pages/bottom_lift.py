@@ -4,10 +4,27 @@ from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.bottom_lift import analyze_bottom_lift
 import pandas as pd
+from query_history import add_entry, get_history
 
 
 def render_bottom_lift_page():
     st.title("Bottom Lift 分析")
+
+    # —— 历史记录 ——
+    history = get_history("bottom_lift")
+    with st.sidebar.expander("历史记录", expanded=False):
+        if history:
+            labels = [h["time"] for h in history]
+            idx = st.selectbox("选择记录", range(len(history)), format_func=lambda i: labels[i], key="bl_hist_select")
+            if st.button("载入历史", key="bl_hist_load"):
+                params = history[idx]["params"]
+                st.session_state["t1_date"] = date.fromisoformat(params["t1_date"])
+                st.session_state["t1_time"] = time.fromisoformat(params["t1_time"])
+                st.session_state["t2_date"] = date.fromisoformat(params["t2_date"])
+                st.session_state["t2_time"] = time.fromisoformat(params["t2_time"])
+                st.experimental_rerun()
+        else:
+            st.write("暂无历史记录")
 
     # 布局：左右两栏输入时间点
     col1, col2 = st.columns(2)
@@ -27,6 +44,13 @@ def render_bottom_lift_page():
         tz = dt_timezone(timedelta(hours=8))
         t1 = datetime.combine(t1_date, t1_time).replace(tzinfo=tz)
         t2 = datetime.combine(t2_date, t2_time).replace(tzinfo=tz)
+
+        add_entry("bottom_lift", {
+            "t1_date": t1_date.isoformat(),
+            "t1_time": t1_time.isoformat(),
+            "t2_date": t2_date.isoformat(),
+            "t2_time": t2_time.isoformat(),
+        })
 
         # 执行分析
         df = analyze_bottom_lift(t1, t2, bars=bars, factor=factor)
