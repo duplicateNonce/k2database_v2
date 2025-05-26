@@ -108,6 +108,9 @@ def render_price_change_by_label():
         for lbl in lbls:
             recs.append({'symbol':sym, 'label':lbl, 'return':ret})
     df = pd.DataFrame(recs)
+    if df.empty:
+        st.warning("无有效数据")
+        return
 
     # —— 4. 构建桶区间 & 分配 —— 
     rmin, rmax = df['return'].min(), df['return'].max()

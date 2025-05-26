@@ -9,9 +9,11 @@ FILE_PATH = Path("data/query_history.json")
 def _load() -> Dict[str, Dict[str, List[dict]]]:
     if FILE_PATH.exists():
         try:
-            return json.loads(FILE_PATH.read_text(encoding="utf-8"))
+            data = json.loads(FILE_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
         except json.JSONDecodeError:
-            return {}
+            pass
     return {}
 
 
