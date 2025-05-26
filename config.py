@@ -20,5 +20,16 @@ CG_API_KEY = os.getenv("CG_API_KEY")
 TZ_NAME = "Asia/Shanghai"
 
 # 登录凭据（从环境变量读取）
-APP_USER = os.getenv("APP_USER", "")
-APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+# 支持在 APP_USERS 中使用 "user:pass" 列表，逗号分隔
+_multi = os.getenv("APP_USERS")
+if _multi:
+    USER_CREDENTIALS = {}
+    for pair in _multi.split(","):
+        if ":" in pair:
+            user, pwd = pair.split(":", 1)
+            USER_CREDENTIALS[user] = pwd
+else:
+    # 兼容单用户模式
+    u = os.getenv("APP_USER", "")
+    p = os.getenv("APP_PASSWORD", "")
+    USER_CREDENTIALS = {u: p} if u and p else {}

@@ -12,7 +12,10 @@ from pages.hyperliquid_whale import render_hyperliquid_whale_page
 from pages.price_change_ranking import render_price_change_page
 from pages.price_change_by_label import render_price_change_by_label
 from pages.monitor import render_monitor
-from config import APP_USER, APP_PASSWORD
+
+# 使用 codex 分支中新加的登录凭证和 rerun 工具
+from config import USER_CREDENTIALS
+from utils import safe_rerun
 
 PAGES = {
     "Overview": render_overview,
@@ -22,18 +25,17 @@ PAGES = {
     "Strong Assets": render_strong_assets_page,
     "Bottom Lift": render_bottom_lift_page,
     "涨跌幅排行榜": render_price_change_page,
-    "RSI Data": rsi_data.render_rsi_data_page, 
+    "RSI Data": rsi_data.render_rsi_data_page,
     "Hyperliquid 鲸鱼监控": render_hyperliquid_whale_page,
-    "标签化涨跌幅": render_price_change_page,
-    "强势标的监控": render_monitor
+    "标签化涨跌幅": render_price_change_by_label,
+    "强势标的监控": render_monitor,
 }
-
+# 动态添加
 PAGES["Long/Short Analysis"] = render_long_short_analysis_page
 PAGES["Label Assets"] = render_label_assets_page
-PAGES["价格&标签指标"] = render_price_change_by_label
-
 
 def require_login() -> bool:
+    """Simple login based on USER_CREDENTIALS."""
     if st.session_state.get("logged_in"):
         return True
 
@@ -41,10 +43,10 @@ def require_login() -> bool:
     u = st.text_input("用户名")
     p = st.text_input("密码", type="password")
     if st.button("登录"):
-        if u == APP_USER and p == APP_PASSWORD:
+        if USER_CREDENTIALS.get(u) == p:
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
-            st.experimental_rerun()
+            safe_rerun()
         else:
             st.error("用户名或密码错误")
     return False
@@ -56,7 +58,7 @@ def main():
 
     if st.sidebar.button("退出登录"):
         st.session_state.clear()
-        st.experimental_rerun()
+        safe_rerun()
 
     choice = st.sidebar.radio("选择页面", list(PAGES.keys()))
     PAGES[choice]()
