@@ -3,10 +3,27 @@ from datetime import datetime, date, time, timedelta, timezone as dt_timezone
 from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
+from query_history import add_entry, get_history
 import pandas as pd
 
 def render_strong_assets_page():
     st.header("区间收益 & 回调 列表（所有资产）")
+
+    # —— 历史记录侧边栏 ——
+    history = get_history("strong_assets")
+    with st.sidebar.expander("历史记录", expanded=False):
+        if history:
+            labels = [h["time"] for h in history]
+            idx = st.selectbox("选择记录", range(len(history)), format_func=lambda i: labels[i], key="sa_hist_select")
+            if st.button("载入历史", key="sa_hist_load"):
+                params = history[idx]["params"]
+                st.session_state["sa_start_date"] = date.fromisoformat(params["start_date"])
+                st.session_state["sa_start_time"] = time.fromisoformat(params["start_time"])
+                st.session_state["sa_end_date"] = date.fromisoformat(params["end_date"])
+                st.session_state["sa_end_time"] = time.fromisoformat(params["end_time"])
+                st.experimental_rerun()
+        else:
+            st.write("暂无历史记录")
 
     # 时间选择（UTC+8）
     col1, col2 = st.columns(2)
@@ -32,6 +49,14 @@ def render_strong_assets_page():
         end_dt = datetime.combine(end_date, end_time).replace(tzinfo=tz)
         start_ts = int(start_dt.timestamp() * 1000)
         end_ts = int(end_dt.timestamp() * 1000)
+
+        # 记录查询参数
+        add_entry("strong_assets", {
+            "start_date": start_date.isoformat(),
+            "start_time": start_time.isoformat(),
+            "end_date": end_date.isoformat(),
+            "end_time": end_time.isoformat(),
+        })
 
         # 拉取所有 symbol 及对应标签
         with engine_ohlcv.connect() as conn:
