@@ -31,6 +31,7 @@ PAGES = {
     "标签化涨跌幅": render_price_change_by_label,
     "强势标的监控": render_monitor,
     "自选跟踪": render_watchlist_page,
+    "Watchlist": render_watchlist_page,
 }
 # 动态添加
 PAGES["Long/Short Analysis"] = render_long_short_analysis_page
