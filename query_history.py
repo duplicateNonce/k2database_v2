@@ -25,8 +25,16 @@ def _save(history: Dict[str, Dict[str, List[dict]]]) -> None:
 def add_entry(page: str, user: str, params: Dict[str, Any]) -> None:
     """Add a history entry for a page and user."""
     history = _load()
+    if not isinstance(history, dict):
+        history = {}
+
     page_hist = history.get(page, {})
+    if not isinstance(page_hist, dict):
+        page_hist = {}
+
     user_hist = page_hist.get(user, [])
+    if not isinstance(user_hist, list):
+        user_hist = []
     user_hist.insert(0, {
         "params": params,
         "time": datetime.now().isoformat(timespec="seconds")
@@ -39,4 +47,14 @@ def add_entry(page: str, user: str, params: Dict[str, Any]) -> None:
 def get_history(page: str, user: str) -> List[dict]:
     """Return history list for a page and user."""
     history = _load()
-    return history.get(page, {}).get(user, [])
+    if not isinstance(history, dict):
+        return []
+
+    page_hist = history.get(page)
+    if not isinstance(page_hist, dict):
+        return []
+
+    user_hist = page_hist.get(user)
+    if isinstance(user_hist, list):
+        return user_hist
+    return []
