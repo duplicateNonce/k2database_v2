@@ -11,7 +11,7 @@ from pages import rsi_data
 from pages.hyperliquid_whale import render_hyperliquid_whale_page
 from pages.price_change_ranking import render_price_change_page
 from pages.price_change_by_label import render_price_change_by_label
-
+from pages.monitor import render_monitor
 
 PAGES = {
     "Overview": render_overview,
@@ -24,6 +24,7 @@ PAGES = {
     "RSI Data": rsi_data.render_rsi_data_page, 
     "Hyperliquid 鲸鱼监控": render_hyperliquid_whale_page,
     "标签化涨跌幅": render_price_change_page,
+    "强势标的监控": render_monitor
 }
 
 PAGES["Long/Short Analysis"] = render_long_short_analysis_page

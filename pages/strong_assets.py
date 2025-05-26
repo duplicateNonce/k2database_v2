@@ -25,19 +25,23 @@ def render_strong_assets_page():
             "结束时间", time(23, 59), key="sa_end_time"
         )
 
-    if st.button("计算区间指标", key="sa_btn"):
-        # 合并日期时间并转毫秒
+    if st.button("计算区间指标", key="sa_btn"): 
+        # 合并日期时间并转毫秒，内部计算使用 UTC+8 时区
         tz = dt_timezone(timedelta(hours=8))
         start_dt = datetime.combine(start_date, start_time).replace(tzinfo=tz)
         end_dt = datetime.combine(end_date, end_time).replace(tzinfo=tz)
         start_ts = int(start_dt.timestamp() * 1000)
         end_ts = int(end_dt.timestamp() * 1000)
 
-        # 拉取所有 symbol
+        # 拉取所有 symbol 及对应标签
         with engine_ohlcv.connect() as conn:
             symbols = [row[0] for row in conn.execute(text(
                 "SELECT DISTINCT symbol FROM ohlcv"
             ))]
+            result = conn.execute(text(
+                "SELECT instrument_id, labels FROM instruments"
+            ))
+            labels_map = {instr_id: labels for instr_id, labels in result}
 
         records = []
         for symbol in symbols:
@@ -54,9 +58,25 @@ def render_strong_assets_page():
 
         # 组织 DataFrame
         df = pd.DataFrame(records)
+
+        # 转换最高/最低价时间戳为 UTC+8 并格式化为 MM-DD HH:MM
+        df['max_close_dt'] = pd.to_datetime(df['max_close_dt'], unit='ms', utc=True) \
+                            .dt.tz_convert('Asia/Shanghai') \
+                            .dt.strftime('%m-%d %H:%M')
+        df['min_close_dt'] = pd.to_datetime(df['min_close_dt'], unit='ms', utc=True) \
+                            .dt.tz_convert('Asia/Shanghai') \
+                            .dt.strftime('%m-%d %H:%M')
+
+        # 计算百分比并四舍五入
         df['period_return (%)'] = (df['period_return'] * 100).round(2)
         df['drawdown (%)'] = (df['drawdown'] * 100).round(2)
+
+        # 插入标签列
+        df['标签'] = df['symbol'].map(lambda s: '，'.join(labels_map.get(s, [])) if labels_map.get(s) else '')
+
+        # 重排和重命名列，并按期间收益降序排序
         df = df[[
+            '标签',
             'symbol',
             'first_close',
             'last_close',
@@ -66,9 +86,20 @@ def render_strong_assets_page():
             'min_close',
             'min_close_dt',
             'drawdown (%)'
-        ]]
-        # 按期间收益率降序排序
-        df = df.sort_values('period_return (%)', ascending=False).reset_index(drop=True)
+        ]].sort_values('period_return (%)', ascending=False).reset_index(drop=True)
 
-        # 展示结果表格（可点击列标题排序）
+        df = df.rename(columns={
+            'symbol': '代币名字',
+            'first_close': '时间1',
+            'last_close': '时间2',
+            'period_return (%)': '期间收益',
+            'max_close': '期间最高价',
+            'max_close_dt': '最高价时间',
+            'min_close': '期间最低价',
+            'min_close_dt': '最低价时间',
+            'drawdown (%)': '最大回撤'
+        })
+
+        # 展示结果表格
         st.dataframe(df, use_container_width=True)
+
