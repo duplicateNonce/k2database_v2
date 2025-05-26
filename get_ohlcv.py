@@ -6,7 +6,7 @@ import requests
 import psycopg2
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
 # 加载环境变量并校验
@@ -152,14 +152,9 @@ def main():
 
     total = 0
     with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = []
-        for sym in symbols:
-            futures.append(
-                executor.submit(process_symbol, sym, start_ts, end_ts, tz8)
-            )
-            time.sleep(0.3)
-        for f in futures:
-            total += f.result()
+        futures = [executor.submit(process_symbol, sym, start_ts, end_ts, tz8) for sym in symbols]
+        for future in as_completed(futures):
+            total += future.result()
 
     print(f"\n总共写入 {total} 条数据", flush=True)
 
