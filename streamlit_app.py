@@ -20,6 +20,7 @@ from utils import safe_rerun
 import json
 from uuid import uuid4
 from pathlib import Path
+import hashlib
 
 PAGES = {
     "Overview": render_overview,
@@ -58,6 +59,25 @@ def save_fingerprints(fp_dict: dict) -> None:
 def require_login() -> bool:
     """Login with optional fingerprint auto-login."""
 
+    # If a device ID exists in localStorage but not in query params,
+    # set the param and reload so Python can access it
+    st.components.v1.html(
+        """
+        <script>
+        (function() {
+            const key = 'deviceId';
+            const params = new URLSearchParams(window.location.search);
+            const stored = window.localStorage.getItem(key);
+            if (stored && !params.get('fp')) {
+                params.set('fp', stored);
+                window.location.search = params.toString();
+            }
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
     # Try automatic login via fingerprint in query params
     params = st.experimental_get_query_params()
     fp_param = params.get("fp", [None])[0]
@@ -82,12 +102,21 @@ def require_login() -> bool:
                 st.error("ERROR 01")
                 return False
             if not existing_fp:
-                fp_param = fp_param or uuid4().hex
+                raw_id = fp_param or uuid4().hex
+                fp_param = hashlib.md5(raw_id.encode()).hexdigest()
                 fingerprints[u] = fp_param
                 save_fingerprints(fingerprints)
                 st.experimental_set_query_params(fp=fp_param)
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
+            st.components.v1.html(
+                f"""
+                <script>
+                window.localStorage.setItem('deviceId', '{fp_param}');
+                </script>
+                """,
+                height=0,
+            )
             safe_rerun()
         else:
             st.error("用户名或密码错误")
