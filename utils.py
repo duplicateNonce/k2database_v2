@@ -21,11 +21,28 @@ def extract_cols(expr: str, cols: list[str]) -> list[str]:
 
 
 def safe_rerun() -> None:
-    """Call Streamlit rerun function if available."""
+    """Rerun the Streamlit app if the API is available.
+
+    This helper checks both the modern ``st.rerun`` and the older
+    ``st.experimental_rerun`` functions.  When running on very old
+    Streamlit versions where neither helper exists, it falls back to
+    raising the internal ``RerunException`` to trigger a script rerun."""
+
     if hasattr(st, "rerun"):
         st.rerun()
-    elif hasattr(st, "experimental_rerun"):
+        return
+    if hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
+        return
+    # Fallback for Streamlit <0.65 without the rerun helpers
+    try:
+        from streamlit.script_runner import RerunException
+        from streamlit.script_request_queue import RerunData
+
+        raise RerunException(RerunData(None))
+    except Exception:
+        # In case the internals changed or are unavailable, quietly no-op
+        pass
 
 
 def short_time_range(d1: str, t1: str, d2: str, t2: str) -> str:
