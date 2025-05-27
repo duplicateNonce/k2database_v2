@@ -7,6 +7,7 @@ from query_history import add_entry, get_history
 from utils import safe_rerun, short_time_range, update_shared_range
 import pandas as pd
 
+
 def render_strong_assets_page():
     st.header("强势标的筛选")
 
@@ -29,9 +30,13 @@ def render_strong_assets_page():
 
     # 如果有共享时间范围，则作为默认值
     if "range_start_date" in st.session_state:
-        st.session_state.setdefault("sa_start_date", st.session_state["range_start_date"])
+        st.session_state.setdefault(
+            "sa_start_date", st.session_state["range_start_date"]
+        )
     if "range_start_time" in st.session_state:
-        st.session_state.setdefault("sa_start_time", st.session_state["range_start_time"])
+        st.session_state.setdefault(
+            "sa_start_time", st.session_state["range_start_time"]
+        )
     if "range_end_date" in st.session_state:
         st.session_state.setdefault("sa_end_date", st.session_state["range_end_date"])
     if "range_end_time" in st.session_state:
@@ -63,17 +68,39 @@ def render_strong_assets_page():
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input(
-            "开始日期", date.today() - timedelta(days=7), key="sa_start_date"
+            "开始日期",
+            value=st.session_state.get(
+                "sa_start_date",
+                st.session_state.get(
+                    "range_start_date", date.today() - timedelta(days=7)
+                ),
+            ),
+            key="sa_start_date",
         )
         start_time = st.time_input(
-            "开始时间", time(0, 0), key="sa_start_time"
+            "开始时间",
+            value=st.session_state.get(
+                "sa_start_time",
+                st.session_state.get("range_start_time", time(0, 0)),
+            ),
+            key="sa_start_time",
         )
     with col2:
         end_date = st.date_input(
-            "结束日期", date.today(), key="sa_end_date"
+            "结束日期",
+            value=st.session_state.get(
+                "sa_end_date",
+                st.session_state.get("range_end_date", date.today()),
+            ),
+            key="sa_end_date",
         )
         end_time = st.time_input(
-            "结束时间", time(23, 59), key="sa_end_time"
+            "结束时间",
+            value=st.session_state.get(
+                "sa_end_time",
+                st.session_state.get("range_end_time", time(23, 59)),
+            ),
+            key="sa_end_time",
         )
 
     if st.button("计算区间指标", key="sa_btn"):
@@ -85,22 +112,25 @@ def render_strong_assets_page():
         end_ts = int(end_dt.timestamp() * 1000)
 
         # 记录查询参数
-        add_entry("strong_assets", user, {
-            "start_date": start_date.isoformat(),
-            "start_time": start_time.isoformat(),
-            "end_date": end_date.isoformat(),
-            "end_time": end_time.isoformat(),
-        })
+        add_entry(
+            "strong_assets",
+            user,
+            {
+                "start_date": start_date.isoformat(),
+                "start_time": start_time.isoformat(),
+                "end_date": end_date.isoformat(),
+                "end_time": end_time.isoformat(),
+            },
+        )
         update_shared_range(start_date, start_time, end_date, end_time)
 
         # 拉取所有 symbol 及对应标签
         with engine_ohlcv.connect() as conn:
-            symbols = [row[0] for row in conn.execute(text(
-                "SELECT DISTINCT symbol FROM ohlcv"
-            ))]
-            result = conn.execute(text(
-                "SELECT instrument_id, labels FROM instruments"
-            ))
+            symbols = [
+                row[0]
+                for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+            ]
+            result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
             labels_map = {instr_id: labels for instr_id, labels in result}
 
         records = []
@@ -109,7 +139,7 @@ def render_strong_assets_page():
                 m = compute_period_metrics(symbol, start_ts, end_ts)
             except ValueError:
                 continue
-            m['symbol'] = symbol
+            m["symbol"] = symbol
             records.append(m)
 
         if not records:
@@ -120,46 +150,59 @@ def render_strong_assets_page():
         df = pd.DataFrame(records)
 
         # 转换最高/最低价时间戳为 UTC+8 并格式化为 MM-DD HH:MM
-        df['max_close_dt'] = pd.to_datetime(df['max_close_dt'], unit='ms', utc=True) \
-                            .dt.tz_convert('Asia/Shanghai') \
-                            .dt.strftime('%m-%d %H:%M')
-        df['min_close_dt'] = pd.to_datetime(df['min_close_dt'], unit='ms', utc=True) \
-                            .dt.tz_convert('Asia/Shanghai') \
-                            .dt.strftime('%m-%d %H:%M')
+        df["max_close_dt"] = (
+            pd.to_datetime(df["max_close_dt"], unit="ms", utc=True)
+            .dt.tz_convert("Asia/Shanghai")
+            .dt.strftime("%m-%d %H:%M")
+        )
+        df["min_close_dt"] = (
+            pd.to_datetime(df["min_close_dt"], unit="ms", utc=True)
+            .dt.tz_convert("Asia/Shanghai")
+            .dt.strftime("%m-%d %H:%M")
+        )
 
         # 计算百分比并四舍五入
-        df['period_return (%)'] = (df['period_return'] * 100).round(2)
-        df['drawdown (%)'] = (df['drawdown'] * 100).round(2)
+        df["period_return (%)"] = (df["period_return"] * 100).round(2)
+        df["drawdown (%)"] = (df["drawdown"] * 100).round(2)
 
         # 插入标签列
-        df['标签'] = df['symbol'].map(lambda s: '，'.join(labels_map.get(s, [])) if labels_map.get(s) else '')
+        df["标签"] = df["symbol"].map(
+            lambda s: "，".join(labels_map.get(s, [])) if labels_map.get(s) else ""
+        )
 
         # 重排和重命名列，并按期间收益降序排序
-        df = df[[
-            '标签',
-            'symbol',
-            'first_close',
-            'last_close',
-            'period_return (%)',
-            'max_close',
-            'max_close_dt',
-            'min_close',
-            'min_close_dt',
-            'drawdown (%)'
-        ]].sort_values('period_return (%)', ascending=False).reset_index(drop=True)
+        df = (
+            df[
+                [
+                    "标签",
+                    "symbol",
+                    "first_close",
+                    "last_close",
+                    "period_return (%)",
+                    "max_close",
+                    "max_close_dt",
+                    "min_close",
+                    "min_close_dt",
+                    "drawdown (%)",
+                ]
+            ]
+            .sort_values("period_return (%)", ascending=False)
+            .reset_index(drop=True)
+        )
 
-        df = df.rename(columns={
-            'symbol': '代币名字',
-            'first_close': '时间1',
-            'last_close': '时间2',
-            'period_return (%)': '期间收益',
-            'max_close': '期间最高价',
-            'max_close_dt': '最高价时间',
-            'min_close': '期间最低价',
-            'min_close_dt': '最低价时间',
-            'drawdown (%)': '最大回撤'
-        })
+        df = df.rename(
+            columns={
+                "symbol": "代币名字",
+                "first_close": "时间1",
+                "last_close": "时间2",
+                "period_return (%)": "期间收益",
+                "max_close": "期间最高价",
+                "max_close_dt": "最高价时间",
+                "min_close": "期间最低价",
+                "min_close_dt": "最低价时间",
+                "drawdown (%)": "最大回撤",
+            }
+        )
 
         # 展示结果表格
         st.dataframe(df, use_container_width=True)
-
