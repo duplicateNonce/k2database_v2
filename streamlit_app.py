@@ -7,7 +7,6 @@ from pages.strong_assets import render_strong_assets_page
 from pages.bottom_lift import render_bottom_lift_page
 from pages.long_short_analysis import render_long_short_analysis_page
 from pages.label_assets import render_label_assets_page
-from pages import rsi_data
 from pages.hyperliquid_whale import render_hyperliquid_whale_page
 from pages.price_change_ranking import render_price_change_page
 from pages.price_change_by_label import render_price_change_by_label
@@ -30,7 +29,6 @@ PAGES = {
     "Strong Assets": render_strong_assets_page,
     "Bottom Lift": render_bottom_lift_page,
     "涨跌幅排行榜": render_price_change_page,
-    "RSI Data": rsi_data.render_rsi_data_page,
     "Hyperliquid 鲸鱼监控": render_hyperliquid_whale_page,
     "标签化涨跌幅": render_price_change_by_label,
     "强势标的监控": render_monitor,
