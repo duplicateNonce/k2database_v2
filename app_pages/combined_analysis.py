@@ -133,7 +133,7 @@ def render_combined_page():
             "end_time": end_time.isoformat(),
         }
         sa_cache_id, df = load_cached("strong_assets", sa_params)
-        if df is None:
+        if df is None or "first_close" not in df.columns:
             with engine_ohlcv.connect() as conn:
                 symbols = [
                     row[0]
