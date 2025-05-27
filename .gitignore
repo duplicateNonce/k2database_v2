@@ -2,4 +2,4 @@
 __pycache__/
 *.pyc
 node_modules/
-__pycache__/
+data/fingerprints.json
