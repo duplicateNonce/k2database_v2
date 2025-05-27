@@ -5,6 +5,7 @@ from app_pages.strong_assets import render_strong_assets_page
 from app_pages.bottom_lift import render_bottom_lift_page
 from app_pages.label_assets import render_label_assets_page
 from app_pages.price_change_by_label import render_price_change_by_label
+from app_pages.combined_analysis import render_combined_page
 from app_pages.watchlist import render_watchlist_page
 
 # 使用 codex 分支中新加的登录凭证和 rerun 工具
@@ -18,6 +19,7 @@ import hashlib
 PAGES = {
     "Overview": render_overview,
     "OHLCV": render_ohlcv_page,
+    "综合分析": render_combined_page,
     "强势标的筛选": render_strong_assets_page,
     "底部抬升筛选": render_bottom_lift_page,
     "标签化涨跌幅": render_price_change_by_label,

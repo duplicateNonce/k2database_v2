@@ -14,6 +14,19 @@ def render_strong_assets_page():
     user = st.session_state.get("username", "default")
     history = get_history("strong_assets", user)
 
+    if "sa_load_params" in st.session_state:
+        params = st.session_state.pop("sa_load_params")
+        st.session_state["sa_start_date"] = date.fromisoformat(params["start_date"])
+        st.session_state["sa_start_time"] = time.fromisoformat(params["start_time"])
+        st.session_state["sa_end_date"] = date.fromisoformat(params["end_date"])
+        st.session_state["sa_end_time"] = time.fromisoformat(params["end_time"])
+        update_shared_range(
+            st.session_state["sa_start_date"],
+            st.session_state["sa_start_time"],
+            st.session_state["sa_end_date"],
+            st.session_state["sa_end_time"],
+        )
+
     # 如果有共享时间范围，则作为默认值
     if "range_start_date" in st.session_state:
         st.session_state.setdefault("sa_start_date", st.session_state["range_start_date"])
@@ -41,17 +54,7 @@ def render_strong_assets_page():
                 key="sa_hist_select",
             )
             if st.button("载入历史", key="sa_hist_load"):
-                params = history[idx]["params"]
-                st.session_state["sa_start_date"] = date.fromisoformat(params["start_date"])
-                st.session_state["sa_start_time"] = time.fromisoformat(params["start_time"])
-                st.session_state["sa_end_date"] = date.fromisoformat(params["end_date"])
-                st.session_state["sa_end_time"] = time.fromisoformat(params["end_time"])
-                update_shared_range(
-                    st.session_state["sa_start_date"],
-                    st.session_state["sa_start_time"],
-                    st.session_state["sa_end_date"],
-                    st.session_state["sa_end_time"],
-                )
+                st.session_state["sa_load_params"] = history[idx]["params"]
                 safe_rerun()
         else:
             st.write("暂无历史记录")
