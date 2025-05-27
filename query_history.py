@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 FILE_PATH = Path("data/query_history.json")
 
@@ -22,8 +22,11 @@ def _save(history: Dict[str, Dict[str, List[dict]]]) -> None:
     FILE_PATH.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def add_entry(page: str, user: str, params: Dict[str, Any]) -> None:
-    """Add a history entry for a page and user."""
+def add_entry(page: str, user: str, params: Dict[str, Any], extra: Optional[Dict[str, Any]] = None) -> None:
+    """Add a history entry for a page and user.
+
+    ``extra`` can store additional metadata such as cached result ids.
+    """
     history = _load()
     if not isinstance(history, dict):
         history = {}
@@ -37,6 +40,7 @@ def add_entry(page: str, user: str, params: Dict[str, Any]) -> None:
         user_hist = []
     user_hist.insert(0, {
         "params": params,
+        "extra": extra or {},
         "time": datetime.now().isoformat(timespec="seconds")
     })
     page_hist[user] = user_hist[:20]

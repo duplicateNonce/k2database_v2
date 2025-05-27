@@ -6,6 +6,7 @@ from strategies.bottom_lift import analyze_bottom_lift
 import pandas as pd
 from query_history import add_entry, get_history
 from utils import safe_rerun, short_time_range, update_shared_range
+from result_cache import load_cached, save_cached
 
 
 def render_bottom_lift_page():
@@ -107,23 +108,25 @@ def render_bottom_lift_page():
         t1 = datetime.combine(t1_date, t1_time).replace(tzinfo=tz)
         t2 = datetime.combine(t2_date, t2_time).replace(tzinfo=tz)
 
-        add_entry(
-            "bottom_lift",
-            user,
-            {
-                "t1_date": t1_date.isoformat(),
-                "t1_time": t1_time.isoformat(),
-                "t2_date": t2_date.isoformat(),
-                "t2_time": t2_time.isoformat(),
-            },
-        )
-        update_shared_range(t1_date, t1_time, t2_date, t2_time)
+        params = {
+            "t1_date": t1_date.isoformat(),
+            "t1_time": t1_time.isoformat(),
+            "t2_date": t2_date.isoformat(),
+            "t2_time": t2_time.isoformat(),
+            "bars": bars,
+            "factor": factor,
+        }
+        cache_id, df = load_cached("bottom_lift", params)
+        if df is None:
 
-        # 执行分析
-        df = analyze_bottom_lift(t1, t2, bars=bars, factor=factor)
-        if df.empty:
-            st.warning("无符合条件的数据")
-            return
+            # 执行分析
+            df = analyze_bottom_lift(t1, t2, bars=bars, factor=factor)
+            if df.empty:
+                st.warning("无符合条件的数据")
+                return
+            save_cached("bottom_lift", params, df)
+        add_entry("bottom_lift", user, params, {"id": cache_id})
+        update_shared_range(t1_date, t1_time, t2_date, t2_time)
 
         # 获取标签映射
         with engine_ohlcv.connect() as conn:
