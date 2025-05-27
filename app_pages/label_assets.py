@@ -84,7 +84,7 @@ def render_label_assets_page():
     instr_df, labels_map = refresh_data()
     labels_df = pd.read_sql('SELECT id, name FROM labels ORDER BY name', conn)
 
-    st.title("🔖 Label Assets 管理")
+    st.title("🔖 编辑标的标签")
 
     # —— 4. 新建标签 ——
     st.subheader('🚩 新建标签')

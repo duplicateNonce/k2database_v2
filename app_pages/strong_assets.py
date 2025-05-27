@@ -8,7 +8,7 @@ from utils import safe_rerun, short_time_range, update_shared_range
 import pandas as pd
 
 def render_strong_assets_page():
-    st.header("区间收益 & 回调 列表（所有资产）")
+    st.header("强势标的筛选")
 
     # —— 历史记录侧边栏 ——
     user = st.session_state.get("username", "default")

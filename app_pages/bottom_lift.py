@@ -9,7 +9,7 @@ from utils import safe_rerun, short_time_range, update_shared_range
 
 
 def render_bottom_lift_page():
-    st.title("Bottom Lift 分析")
+    st.title("底部抬升筛选")
 
     # —— 历史记录 ——
     user = st.session_state.get("username", "default")

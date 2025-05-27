@@ -90,7 +90,7 @@ def find_cross_times(dates: pd.Series, macd_line: pd.Series, signal_line: pd.Ser
 
 
 def render_watchlist_page():
-    st.title("自选重点标的跟踪")
+    st.title("自选标的")
 
     watchlist = load_watchlist()
     # ---- 管理自选列表 ----
