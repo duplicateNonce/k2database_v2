@@ -23,7 +23,7 @@ def load_cached(page: str, params: Dict[str, Any]) -> Tuple[str, Optional[pd.Dat
     path = CACHE_DIR / page / f"{cache_id}.csv"
     if path.exists():
         try:
-            df = pd.read_csv(path)
+            df = pd.read_csv(path, index_col=0)
             return cache_id, df
         except Exception:
             pass
@@ -36,7 +36,7 @@ def save_cached(page: str, params: Dict[str, Any], df: pd.DataFrame) -> str:
     path = CACHE_DIR / page / f"{cache_id}.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        df.to_csv(path, index=False)
+        df.to_csv(path, index=True)
     except Exception:
         pass
     return cache_id
@@ -47,7 +47,7 @@ def load_by_id(page: str, cache_id: str) -> Optional[pd.DataFrame]:
     path = CACHE_DIR / page / f"{cache_id}.csv"
     if path.exists():
         try:
-            return pd.read_csv(path)
+            return pd.read_csv(path, index_col=0)
         except Exception:
             return None
     return None

@@ -113,6 +113,16 @@ def render_combined_page():
 
     run_all = st.button("一键分析", key="combo_all_btn")
 
+    history_params = {
+        "start_date": start_date.isoformat(),
+        "start_time": start_time.isoformat(),
+        "end_date": end_date.isoformat(),
+        "end_time": end_time.isoformat(),
+        "bars": bars,
+        "factor": factor,
+    }
+    history_extra = {}
+
     st.subheader("强势标的筛选")
     run_sa = st.button("计算强势标的", key="combo_sa_btn")
     if run_sa or run_all:
@@ -152,19 +162,14 @@ def render_combined_page():
                 result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
                 labels_map = {instr_id: labels for instr_id, labels in result}
 
-        add_entry(
-            "combined_analysis",
-            user,
-            {
-                "start_date": start_date.isoformat(),
-                "start_time": start_time.isoformat(),
-                "end_date": end_date.isoformat(),
-                "end_time": end_time.isoformat(),
-                "bars": bars,
-                "factor": factor,
-            },
-            {"sa_id": sa_cache_id},
-        )
+        history_extra["sa_id"] = sa_cache_id
+        if not run_all:
+            add_entry(
+                "combined_analysis",
+                user,
+                history_params,
+                {"sa_id": sa_cache_id},
+            )
         df["max_close_dt"] = format_time_col(df["max_close_dt"])
         df["min_close_dt"] = format_time_col(df["min_close_dt"])
         df["period_return (%)"] = (df["period_return"] * 100).round(2)
@@ -228,19 +233,14 @@ def render_combined_page():
                 return
             save_cached("bottom_lift", bl_params, df)
 
-        add_entry(
-            "combined_analysis",
-            user,
-            {
-                "start_date": start_date.isoformat(),
-                "start_time": start_time.isoformat(),
-                "end_date": end_date.isoformat(),
-                "end_time": end_time.isoformat(),
-                "bars": bars,
-                "factor": factor,
-            },
-            {"bl_id": bl_cache_id},
-        )
+        history_extra["bl_id"] = bl_cache_id
+        if not run_all:
+            add_entry(
+                "combined_analysis",
+                user,
+                history_params,
+                {"bl_id": bl_cache_id},
+            )
 
         with engine_ohlcv.connect() as conn:
             result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
@@ -299,19 +299,14 @@ def render_combined_page():
             df["bucket"] = pd.cut(df["return"], bins=bins, labels=bucket_labels, include_lowest=True)
             save_cached("price_change_by_label", label_params, df)
 
-        add_entry(
-            "combined_analysis",
-            user,
-            {
-                "start_date": start_date.isoformat(),
-                "start_time": start_time.isoformat(),
-                "end_date": end_date.isoformat(),
-                "end_time": end_time.isoformat(),
-                "bars": bars,
-                "factor": factor,
-            },
-            {"label_id": label_cache_id},
-        )
+        history_extra["label_id"] = label_cache_id
+        if not run_all:
+            add_entry(
+                "combined_analysis",
+                user,
+                history_params,
+                {"label_id": label_cache_id},
+            )
 
         rmin, rmax = df["return"].min(), df["return"].max()
         low = (rmin * 100 // 5) * 5 / 100
@@ -345,3 +340,5 @@ def render_combined_page():
                     df_show.sort_values(["return", "symbol"], ascending=[False, True]),
                     use_container_width=True,
                 )
+        if run_all:
+            add_entry("combined_analysis", user, history_params, history_extra)
