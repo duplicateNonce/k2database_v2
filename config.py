@@ -1,27 +1,44 @@
 import os
 from dotenv import load_dotenv
 
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    st = None
+
 load_dotenv()
 
+
+def secret_get(key: str, default: str = ""):
+    """Retrieve configuration from env vars or st.secrets."""
+    val = os.getenv(key)
+    if val is not None and val != "":
+        return val
+    if st and key in st.secrets:
+        return st.secrets[key]
+    return default
+
 # 通用环境配置
-DB_USER     = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_HOST     = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT     = os.getenv("DB_PORT", "5432")
+DB_USER = secret_get("DB_USER", "postgres")
+DB_PASSWORD = secret_get("DB_PASSWORD", "")
+DB_HOST = secret_get("DB_HOST", "127.0.0.1")
+DB_PORT = secret_get("DB_PORT", "5432")
 
 # 数据库名称：支持同时连接两个库
-COIN_DB_NAME  = os.getenv("COIN_DB_NAME", os.getenv("DB_NAME", "postgres"))
-OHLCV_DB_NAME = os.getenv("OHLCV_DB_NAME", COIN_DB_NAME)
+COIN_DB_NAME = secret_get("COIN_DB_NAME", secret_get("DB_NAME", "postgres"))
+OHLCV_DB_NAME = secret_get("OHLCV_DB_NAME", COIN_DB_NAME)
 
 # 业务所需 API Key
-CG_API_KEY = os.getenv("CG_API_KEY")
+CG_API_KEY = secret_get("CG_API_KEY")
 
 # 时区常量
 TZ_NAME = "Asia/Shanghai"
 
 # 登录凭据（从环境变量读取）
 # 支持在 APP_USERS 中使用 "user:pass" 列表，逗号分隔
-_multi = os.getenv("APP_USERS")
+_multi = secret_get("APP_USERS")
+if not _multi and st and "app_users" in st.secrets:
+    _multi = ",".join(f"{k}:{v}" for k, v in st.secrets["app_users"].items())
 if _multi:
     USER_CREDENTIALS = {}
     for pair in _multi.split(","):
@@ -31,6 +48,6 @@ if _multi:
             USER_CREDENTIALS[user.strip()] = pwd.strip()
 else:
     # 兼容单用户模式
-    u = os.getenv("APP_USER", "")
-    p = os.getenv("APP_PASSWORD", "")
+    u = secret_get("APP_USER")
+    p = secret_get("APP_PASSWORD")
     USER_CREDENTIALS = {u: p} if u and p else {}
