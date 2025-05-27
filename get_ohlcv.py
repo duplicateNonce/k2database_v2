@@ -6,23 +6,24 @@ import requests
 import psycopg2
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+from config import secret_get
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
 # 加载环境变量并校验
 load_dotenv()
-API_KEY = os.getenv("CG_API_KEY")
+API_KEY = secret_get("CG_API_KEY")
 if not API_KEY:
     print("请在 .env 中配置 CG_API_KEY", flush=True)
     sys.exit(1)
 
 # 数据库配置
 DB_CFG = {
-    "host": os.getenv("DB_HOST", "127.0.0.1"),
-    "port": os.getenv("DB_PORT", "5432"),
-    "dbname": os.getenv("DB_NAME", "postgres"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", ""),
+    "host": secret_get("DB_HOST", "127.0.0.1"),
+    "port": secret_get("DB_PORT", "5432"),
+    "dbname": secret_get("DB_NAME", "postgres"),
+    "user": secret_get("DB_USER", "postgres"),
+    "password": secret_get("DB_PASSWORD", ""),
 }
 
 # 确保 ohlcv 表存在

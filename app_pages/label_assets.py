@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+from config import secret_get
 
 def render_label_assets_page():
     """
@@ -14,11 +15,11 @@ def render_label_assets_page():
     """
     load_dotenv()
     DB_CFG = {
-        'host':     os.getenv('DB_HOST', '127.0.0.1'),
-        'port':     os.getenv('DB_PORT', '5432'),
-        'dbname':   os.getenv('INSTR_DB', 'postgres'),
-        'user':     os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', ''),
+        'host':     secret_get('DB_HOST', '127.0.0.1'),
+        'port':     secret_get('DB_PORT', '5432'),
+        'dbname':   secret_get('INSTR_DB', 'postgres'),
+        'user':     secret_get('DB_USER', 'postgres'),
+        'password': secret_get('DB_PASSWORD', ''),
     }
     conn = psycopg2.connect(**DB_CFG)
     cur = conn.cursor()
