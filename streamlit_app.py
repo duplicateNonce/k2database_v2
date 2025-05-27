@@ -1,17 +1,17 @@
 import streamlit as st
-from pages.overview import render_overview
-from pages.history import render_history
-from pages.metrics_editor import render_metrics_editor
-from pages.ohlcv import render_ohlcv_page
-from pages.strong_assets import render_strong_assets_page
-from pages.bottom_lift import render_bottom_lift_page
-from pages.long_short_analysis import render_long_short_analysis_page
-from pages.label_assets import render_label_assets_page
-from pages.hyperliquid_whale import render_hyperliquid_whale_page
-from pages.price_change_ranking import render_price_change_page
-from pages.price_change_by_label import render_price_change_by_label
-from pages.monitor import render_monitor
-from pages.watchlist import render_watchlist_page
+from app_pages.overview import render_overview
+from app_pages.history import render_history
+from app_pages.metrics_editor import render_metrics_editor
+from app_pages.ohlcv import render_ohlcv_page
+from app_pages.strong_assets import render_strong_assets_page
+from app_pages.bottom_lift import render_bottom_lift_page
+from app_pages.long_short_analysis import render_long_short_analysis_page
+from app_pages.label_assets import render_label_assets_page
+from app_pages.hyperliquid_whale import render_hyperliquid_whale_page
+from app_pages.price_change_ranking import render_price_change_page
+from app_pages.price_change_by_label import render_price_change_by_label
+from app_pages.monitor import render_monitor
+from app_pages.watchlist import render_watchlist_page
 
 # 使用 codex 分支中新加的登录凭证和 rerun 工具
 from config import USER_CREDENTIALS
@@ -78,8 +78,8 @@ def require_login() -> bool:
     )
 
     # Try automatic login via fingerprint in query params
-    params = st.experimental_get_query_params()
-    fp_param = params.get("fp", [None])[0]
+    params = st.query_params
+    fp_param = params.get("fp")
     fingerprints = load_fingerprints()
     if fp_param:
         for name, fp in fingerprints.items():
