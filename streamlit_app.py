@@ -1,16 +1,10 @@
 import streamlit as st
 from app_pages.overview import render_overview
-from app_pages.history import render_history
-from app_pages.metrics_editor import render_metrics_editor
 from app_pages.ohlcv import render_ohlcv_page
 from app_pages.strong_assets import render_strong_assets_page
 from app_pages.bottom_lift import render_bottom_lift_page
-from app_pages.long_short_analysis import render_long_short_analysis_page
 from app_pages.label_assets import render_label_assets_page
-from app_pages.hyperliquid_whale import render_hyperliquid_whale_page
-from app_pages.price_change_ranking import render_price_change_page
 from app_pages.price_change_by_label import render_price_change_by_label
-from app_pages.monitor import render_monitor
 from app_pages.watchlist import render_watchlist_page
 
 # 使用 codex 分支中新加的登录凭证和 rerun 工具
@@ -23,21 +17,15 @@ import hashlib
 
 PAGES = {
     "Overview": render_overview,
-    "History": render_history,
-    "Metrics Editor": render_metrics_editor,
     "OHLCV": render_ohlcv_page,
-    "Strong Assets": render_strong_assets_page,
-    "Bottom Lift": render_bottom_lift_page,
-    "涨跌幅排行榜": render_price_change_page,
-    "Hyperliquid 鲸鱼监控": render_hyperliquid_whale_page,
+    "强势标的筛选": render_strong_assets_page,
+    "底部抬升筛选": render_bottom_lift_page,
     "标签化涨跌幅": render_price_change_by_label,
-    "强势标的监控": render_monitor,
     "自选跟踪": render_watchlist_page,
-    "Watchlist": render_watchlist_page,
+    "自选标的": render_watchlist_page,
 }
 # 动态添加
-PAGES["Long/Short Analysis"] = render_long_short_analysis_page
-PAGES["Label Assets"] = render_label_assets_page
+PAGES["编辑标的标签"] = render_label_assets_page
 
 FINGERPRINT_FILE = Path("data/fingerprints.json")
 
