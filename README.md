@@ -8,6 +8,12 @@ APP_USERS=alice:pass1,bob:pass2
 ```
 
 Each entry uses `username:password` pairs separated by commas.
+Spaces around commas are ignored, so the following is also valid:
+
+```
+# .env
+APP_USERS=alice:pass1, bob:pass2
+```
 
 ## Streamlit notes
 
