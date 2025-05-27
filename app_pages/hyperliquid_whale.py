@@ -8,6 +8,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 from dotenv import load_dotenv
+from config import secret_get
 
 load_dotenv()
 
@@ -16,11 +17,11 @@ def get_conn():
     创建并缓存数据库连接，使用 st.cache_resource
     """
     DB_CONFIG = {
-        'host': os.getenv('DB_HOST', '127.0.0.1'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'dbname': os.getenv('INSTR_DB', 'postgres'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', ''),
+        'host': secret_get('DB_HOST', '127.0.0.1'),
+        'port': secret_get('DB_PORT', '5432'),
+        'dbname': secret_get('INSTR_DB', 'postgres'),
+        'user': secret_get('DB_USER', 'postgres'),
+        'password': secret_get('DB_PASSWORD', ''),
     }
 
     @st.cache_resource
@@ -183,7 +184,7 @@ def render_hyperliquid_whale_page():
     st_autorefresh(interval=5_000, key="hyperliquid_refresh")
 
     # 拉取并存储数据
-    api_key = os.getenv('CG_API_KEY')
+    api_key = secret_get('CG_API_KEY')
     if not api_key:
         st.error('未配置 CG_API_KEY')
         return

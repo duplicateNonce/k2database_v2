@@ -26,6 +26,44 @@ bob   = "pass2"
 
 Environment variables still take precedence if both are provided.
 
+## Database settings
+
+The app connects to PostgreSQL using the host, port, username and
+password defined by several environment variables.  Defaults are
+set in `config.py`, but you can override them locally using a `.env`
+file or on Streamlit Cloud via `secrets.toml`.
+
+Common variables:
+
+```
+DB_HOST     # database address, e.g. 127.0.0.1 for local testing
+DB_PORT     # usually 5432
+DB_USER     # database user
+DB_PASSWORD # database password
+```
+
+For example, a local `.env` could look like:
+
+```env
+DB_HOST=127.0.0.1
+DB_USER=postgres
+DB_PASSWORD=your_local_password
+```
+
+When deploying to Streamlit Cloud, provide the same variables in the
+app's **Secrets** so it can reach your server:
+
+```toml
+DB_HOST = "YOUR-SERVER-IP"
+DB_PORT = "5432"
+DB_USER = "postgres"
+DB_PASSWORD = "cloud_password"
+```
+
+If your database listens only on `127.0.0.1` you'll need to update
+`postgresql.conf` so it binds to a public interface and allows remote
+connections.
+
 ## Streamlit notes
 
 This project runs on a minimal Streamlit build that does **not** support
