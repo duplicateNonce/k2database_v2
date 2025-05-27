@@ -8,9 +8,11 @@ import numpy as np
 from datetime import datetime, date, time, timedelta, timezone
 from sqlalchemy import text
 from db import engine_ohlcv
-from config import TZ_NAME
 import psycopg2
 from dotenv import load_dotenv
+from utils import safe_rerun, short_time_range
+from query_history import add_entry, get_history
+from result_cache import load_cached, save_cached
 
 # —— 1. 读取环境 & 配置 ——
 load_dotenv()
@@ -74,22 +76,71 @@ def compute_period_metrics(symbol, start_ts, end_ts):
 def render_price_change_by_label():
     st.title("📊 按涨跌幅区间 分析 Label")
 
+    user = st.session_state.get("username", "default")
+    history = get_history("price_change_by_label", user)
+
+    if "pcl_load_params" in st.session_state:
+        params = st.session_state.pop("pcl_load_params")
+        sd = date.fromisoformat(params["start_date"])
+        stime = time.fromisoformat(params["start_time"])
+        ed = date.fromisoformat(params["end_date"])
+        etime = time.fromisoformat(params["end_time"])
+        preset = params.get("preset", True)
+    else:
+        preset = True
+        sd = None
+        stime = None
+        ed = None
+        etime = None
+
+    with st.sidebar.expander("历史记录", expanded=False):
+        if history:
+            labels = [
+                short_time_range(
+                    h["params"]["start_date"],
+                    h["params"]["start_time"],
+                    h["params"]["end_date"],
+                    h["params"]["end_time"],
+                )
+                for h in history
+            ]
+            idx = st.selectbox(
+                "选择记录",
+                range(len(history)),
+                format_func=lambda i: labels[i],
+                key="pcl_hist_select",
+            )
+            if st.button("载入历史", key="pcl_hist_load"):
+                st.session_state["pcl_load_params"] = history[idx]["params"]
+                safe_rerun()
+        else:
+            st.write("暂无历史记录")
+
     # —— 2. 时间区间控件 —— 
     now = datetime.now(timezone.utc)
     st.markdown("#### 请选择时间区间")
     c1, c2 = st.columns(2)
     with c1:
-        sd = st.date_input("开始日期", now.date() - timedelta(hours=4))
-        stime = st.time_input("开始时间", time(now.hour, now.minute))
+        sd = st.date_input(
+            "开始日期",
+            sd or (now.date() - timedelta(hours=4)),
+        )
+        stime = st.time_input(
+            "开始时间",
+            stime or time(now.hour, now.minute),
+        )
     with c2:
-        ed = st.date_input("结束日期", now.date())
-        etime = st.time_input("结束时间", time(now.hour, now.minute))
+        ed = st.date_input("结束日期", ed or now.date())
+        etime = st.time_input(
+            "结束时间",
+            etime or time(now.hour, now.minute),
+        )
     start_dt = datetime(sd.year, sd.month, sd.day, stime.hour, stime.minute, tzinfo=timezone.utc)
     end_dt   = datetime(ed.year, ed.month, ed.day, etime.hour, etime.minute, tzinfo=timezone.utc)
     start_custom_ts = int(start_dt.timestamp()*1000)
     end_custom_ts   = int(end_dt.timestamp()*1000)
 
-    preset = st.checkbox("使用 4 小时 窗口", value=True)
+    preset = st.checkbox("使用 4 小时 窗口", value=preset)
     if preset:
         start_ts = int((now - timedelta(hours=4)).timestamp()*1000)
         end_ts   = int(now.timestamp()*1000)
@@ -97,30 +148,41 @@ def render_price_change_by_label():
         start_ts = start_custom_ts
         end_ts   = end_custom_ts
 
-    # —— 3. 读取映射 & 计算 —— 
-    df_map = get_mappings()
-    symbols = df_map['symbol'].unique()
-    recs = []
-    for sym in symbols:
-        ret, _ = compute_period_metrics(sym, start_ts, end_ts)
-        if ret is None: continue
-        lbls = df_map.loc[df_map['symbol']==sym, 'label']
-        for lbl in lbls:
-            recs.append({'symbol':sym, 'label':lbl, 'return':ret})
-    df = pd.DataFrame(recs)
-    if df.empty:
-        st.warning("无有效数据")
-        return
+    params = {
+        "start_date": sd.isoformat(),
+        "start_time": stime.isoformat(),
+        "end_date": ed.isoformat(),
+        "end_time": etime.isoformat(),
+        "preset": preset,
+    }
+    cache_id, df = load_cached("price_change_by_label", params)
+    if df is None:
+        # —— 3. 读取映射 & 计算 ——
+        df_map = get_mappings()
+        symbols = df_map['symbol'].unique()
+        recs = []
+        for sym in symbols:
+            ret, _ = compute_period_metrics(sym, start_ts, end_ts)
+            if ret is None:
+                continue
+            lbls = df_map.loc[df_map['symbol'] == sym, 'label']
+            for lbl in lbls:
+                recs.append({'symbol': sym, 'label': lbl, 'return': ret})
+        df = pd.DataFrame(recs)
+        if df.empty:
+            st.warning("无有效数据")
+            return
+        # —— 4. 构建桶区间 & 分配 ——
+        rmin, rmax = df['return'].min(), df['return'].max()
+        low = math.floor(rmin * 100 / 5) * 5 / 100
+        high = math.ceil(rmax * 100 / 5) * 5 / 100
+        bins = np.arange(low, high + 0.0001, 0.05)
+        bucket_labels = [f"{int(l*100)}%~{int(u*100)}%" for l, u in zip(bins[:-1], bins[1:])]
+        df['bucket'] = pd.cut(df['return'], bins=bins, labels=bucket_labels, include_lowest=True)
+        save_cached("price_change_by_label", params, df)
+    add_entry("price_change_by_label", user, params, {"id": cache_id})
 
-    # —— 4. 构建桶区间 & 分配 —— 
-    rmin, rmax = df['return'].min(), df['return'].max()
-    low = math.floor(rmin*100/5)*5/100
-    high= math.ceil(rmax*100/5)*5/100
-    bins = np.arange(low, high+0.0001, 0.05)
-    bucket_labels = [f"{int(l*100)}%~{int(u*100)}%" for l,u in zip(bins[:-1],bins[1:])]
-    df['bucket'] = pd.cut(df['return'], bins=bins, labels=bucket_labels, include_lowest=True)
-
-    # —— 5. 统计透视表 —— 
+    # —— 5. 统计透视表 ——
     grp = df.groupby(['label','bucket'])['symbol'].nunique().reset_index(name='count')
     pivot = grp.pivot(index='label', columns='bucket', values='count').fillna(0).astype(int)
 

@@ -5,6 +5,7 @@ from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
 from query_history import add_entry, get_history
 from utils import safe_rerun, short_time_range, update_shared_range
+from result_cache import load_cached, save_cached
 import pandas as pd
 
 
@@ -111,43 +112,46 @@ def render_strong_assets_page():
         start_ts = int(start_dt.timestamp() * 1000)
         end_ts = int(end_dt.timestamp() * 1000)
 
-        # 记录查询参数
-        add_entry(
-            "strong_assets",
-            user,
-            {
-                "start_date": start_date.isoformat(),
-                "start_time": start_time.isoformat(),
-                "end_date": end_date.isoformat(),
-                "end_time": end_time.isoformat(),
-            },
-        )
+        params = {
+            "start_date": start_date.isoformat(),
+            "start_time": start_time.isoformat(),
+            "end_date": end_date.isoformat(),
+            "end_time": end_time.isoformat(),
+        }
+        cache_id, df = load_cached("strong_assets", params)
+        if df is None:
+
+            # 拉取所有 symbol 及对应标签
+            with engine_ohlcv.connect() as conn:
+                symbols = [
+                    row[0]
+                    for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+                ]
+                result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
+                labels_map = {instr_id: labels for instr_id, labels in result}
+
+            records = []
+            for symbol in symbols:
+                try:
+                    m = compute_period_metrics(symbol, start_ts, end_ts)
+                except ValueError:
+                    continue
+                m["symbol"] = symbol
+                records.append(m)
+
+            if not records:
+                st.warning("该区间内无数据")
+                return
+
+            df = pd.DataFrame(records)
+            save_cached("strong_assets", params, df)
+        else:
+            with engine_ohlcv.connect() as conn:
+                result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
+                labels_map = {instr_id: labels for instr_id, labels in result}
+
+        add_entry("strong_assets", user, params, {"id": cache_id})
         update_shared_range(start_date, start_time, end_date, end_time)
-
-        # 拉取所有 symbol 及对应标签
-        with engine_ohlcv.connect() as conn:
-            symbols = [
-                row[0]
-                for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
-            ]
-            result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
-            labels_map = {instr_id: labels for instr_id, labels in result}
-
-        records = []
-        for symbol in symbols:
-            try:
-                m = compute_period_metrics(symbol, start_ts, end_ts)
-            except ValueError:
-                continue
-            m["symbol"] = symbol
-            records.append(m)
-
-        if not records:
-            st.warning("该区间内无数据")
-            return
-
-        # 组织 DataFrame
-        df = pd.DataFrame(records)
 
         # 转换最高/最低价时间戳为 UTC+8 并格式化为 MM-DD HH:MM
         df["max_close_dt"] = (
