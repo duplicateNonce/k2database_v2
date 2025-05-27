@@ -104,6 +104,13 @@ def render_combined_page():
 
     update_shared_range(start_date, start_time, end_date, end_time)
 
+    # These parameters are needed for history logging below. They are
+    # normally collected later from widgets, but may not be available when
+    # running the strong assets section first. Fetch them from session
+    # state with defaults so they are always defined.
+    bars = st.session_state.get("combo_bars", 4)
+    factor = float(st.session_state.get("combo_factor", 100.0))
+
     run_all = st.button("一键分析", key="combo_all_btn")
 
     st.subheader("强势标的筛选")
