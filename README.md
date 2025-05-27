@@ -15,6 +15,17 @@ Spaces around commas are ignored, so the following is also valid:
 APP_USERS=alice:pass1, bob:pass2
 ```
 
+On Streamlit Cloud you may also provide the same values in
+`.streamlit/secrets.toml`:
+
+```
+[app_users]
+alice = "pass1"
+bob   = "pass2"
+```
+
+Environment variables still take precedence if both are provided.
+
 ## Streamlit notes
 
 This project runs on a minimal Streamlit build that does **not** support
