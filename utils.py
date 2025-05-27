@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timezone
 import pytz
+import pandas as pd
 from config import TZ_NAME
 import streamlit as st
 
@@ -61,3 +62,14 @@ def update_shared_range(start_date, start_time, end_date, end_time) -> None:
     st.session_state["range_start_time"] = start_time
     st.session_state["range_end_date"] = end_date
     st.session_state["range_end_time"] = end_time
+
+
+def format_time_col(col: pd.Series) -> pd.Series:
+    """Return formatted time strings for a column of ms timestamps or ISO datetimes."""
+    if pd.api.types.is_datetime64_any_dtype(col):
+        dt = col.dt.tz_convert("Asia/Shanghai")
+    else:
+        dt = pd.to_datetime(col, errors="coerce", unit="ms", utc=True)
+        dt_alt = pd.to_datetime(col, errors="coerce", utc=True)
+        dt = dt.fillna(dt_alt).dt.tz_convert("Asia/Shanghai")
+    return dt.dt.strftime("%m-%d %H:%M")
