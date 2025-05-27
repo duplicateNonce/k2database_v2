@@ -226,7 +226,8 @@ def render_combined_page():
             "factor": factor,
         }
         bl_cache_id, df = load_cached("bottom_lift", bl_params)
-        if df is None:
+        expected_cols = {"L1_time", "L1_low", "L2_time", "L2_low", "slope"}
+        if df is None or not expected_cols.issubset(df.columns):
             df = analyze_bottom_lift(start_dt, end_dt, bars=bars, factor=factor)
             if df.empty:
                 st.warning("无符合条件的数据")
