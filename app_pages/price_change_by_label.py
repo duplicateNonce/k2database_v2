@@ -10,6 +10,7 @@ from sqlalchemy import text
 from db import engine_ohlcv
 import psycopg2
 from dotenv import load_dotenv
+from config import secret_get
 from utils import safe_rerun, short_time_range
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
@@ -17,11 +18,11 @@ from result_cache import load_cached, save_cached
 # —— 1. 读取环境 & 配置 ——
 load_dotenv()
 INSTR_DB = {
-    'host':   os.getenv('DB_HOST','127.0.0.1'),
-    'port':   os.getenv('DB_PORT','5432'),
-    'dbname': os.getenv('DB_NAME','postgres'),
-    'user':   os.getenv('DB_USER','postgres'),
-    'password': os.getenv('DB_PASSWORD',''),
+    'host':   secret_get('DB_HOST','127.0.0.1'),
+    'port':   secret_get('DB_PORT','5432'),
+    'dbname': secret_get('DB_NAME','postgres'),
+    'user':   secret_get('DB_USER','postgres'),
+    'password': secret_get('DB_PASSWORD',''),
 }
 
 def get_mappings():

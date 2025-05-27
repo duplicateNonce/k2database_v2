@@ -5,6 +5,7 @@ import psycopg2
 import altair as alt
 from datetime import timedelta
 from dotenv import load_dotenv
+from config import secret_get
 
 
 def render_long_short_analysis_page():
@@ -14,15 +15,15 @@ def render_long_short_analysis_page():
     load_dotenv()
     # 主数据：coinmarket_aggregated 数据库
     DB_CFG = {
-        'host': os.getenv('DB_HOST', '127.0.0.1'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'dbname': os.getenv('DB_NAME', 'coinmarket_aggregated'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', ''),
+        'host': secret_get('DB_HOST', '127.0.0.1'),
+        'port': secret_get('DB_PORT', '5432'),
+        'dbname': secret_get('DB_NAME', 'coinmarket_aggregated'),
+        'user': secret_get('DB_USER', 'postgres'),
+        'password': secret_get('DB_PASSWORD', ''),
     }
     # instruments 表所在数据库（默认postgres）
     DB_CFG_INST = DB_CFG.copy()
-    DB_CFG_INST['dbname'] = os.getenv('INSTR_DB', 'postgres')
+    DB_CFG_INST['dbname'] = secret_get('INSTR_DB', 'postgres')
 
     @st.cache_data(ttl=60)
     def load_data():

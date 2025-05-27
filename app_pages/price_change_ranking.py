@@ -2,14 +2,15 @@ import os
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
+from config import secret_get
 
 @st.cache_resource
 def get_engine():
-    host     = os.getenv('DB_HOST', '127.0.0.1')
-    port     = os.getenv('DB_PORT', '5432')
-    dbname   = os.getenv('INSTR_DB', 'postgres')
-    user     = os.getenv('DB_USER', 'postgres')
-    password = os.getenv('DB_PASSWORD', '')
+    host     = secret_get('DB_HOST', '127.0.0.1')
+    port     = secret_get('DB_PORT', '5432')
+    dbname   = secret_get('INSTR_DB', 'postgres')
+    user     = secret_get('DB_USER', 'postgres')
+    password = secret_get('DB_PASSWORD', '')
     url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
     return create_engine(url)
 
