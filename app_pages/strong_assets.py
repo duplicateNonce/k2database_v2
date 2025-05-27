@@ -4,7 +4,7 @@ from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
 from query_history import add_entry, get_history
-from utils import safe_rerun, short_time_range, update_shared_range
+from utils import safe_rerun, short_time_range, update_shared_range, format_time_col
 from result_cache import load_cached, save_cached
 import pandas as pd
 
@@ -154,16 +154,8 @@ def render_strong_assets_page():
         update_shared_range(start_date, start_time, end_date, end_time)
 
         # 转换最高/最低价时间戳为 UTC+8 并格式化为 MM-DD HH:MM
-        df["max_close_dt"] = (
-            pd.to_datetime(df["max_close_dt"], unit="ms", utc=True)
-            .dt.tz_convert("Asia/Shanghai")
-            .dt.strftime("%m-%d %H:%M")
-        )
-        df["min_close_dt"] = (
-            pd.to_datetime(df["min_close_dt"], unit="ms", utc=True)
-            .dt.tz_convert("Asia/Shanghai")
-            .dt.strftime("%m-%d %H:%M")
-        )
+        df["max_close_dt"] = format_time_col(df["max_close_dt"])
+        df["min_close_dt"] = format_time_col(df["min_close_dt"])
 
         # 计算百分比并四舍五入
         df["period_return (%)"] = (df["period_return"] * 100).round(2)

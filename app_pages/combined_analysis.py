@@ -10,7 +10,7 @@ from app_pages.price_change_by_label import (
     get_mappings,
     compute_period_metrics as label_compute,
 )
-from utils import update_shared_range, safe_rerun, short_time_range
+from utils import update_shared_range, safe_rerun, short_time_range, format_time_col
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
 
@@ -165,16 +165,8 @@ def render_combined_page():
             },
             {"sa_id": sa_cache_id},
         )
-        df["max_close_dt"] = (
-            pd.to_datetime(df["max_close_dt"], unit="ms", utc=True)
-            .dt.tz_convert("Asia/Shanghai")
-            .dt.strftime("%m-%d %H:%M")
-        )
-        df["min_close_dt"] = (
-            pd.to_datetime(df["min_close_dt"], unit="ms", utc=True)
-            .dt.tz_convert("Asia/Shanghai")
-            .dt.strftime("%m-%d %H:%M")
-        )
+        df["max_close_dt"] = format_time_col(df["max_close_dt"])
+        df["min_close_dt"] = format_time_col(df["min_close_dt"])
         df["period_return (%)"] = (df["period_return"] * 100).round(2)
         df["drawdown (%)"] = (df["drawdown"] * 100).round(2)
         df["标签"] = df["symbol"].map(
