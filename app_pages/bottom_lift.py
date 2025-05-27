@@ -15,6 +15,19 @@ def render_bottom_lift_page():
     user = st.session_state.get("username", "default")
     history = get_history("bottom_lift", user)
 
+    if "bl_load_params" in st.session_state:
+        params = st.session_state.pop("bl_load_params")
+        st.session_state["t1_date"] = date.fromisoformat(params["t1_date"])
+        st.session_state["t1_time"] = time.fromisoformat(params["t1_time"])
+        st.session_state["t2_date"] = date.fromisoformat(params["t2_date"])
+        st.session_state["t2_time"] = time.fromisoformat(params["t2_time"])
+        update_shared_range(
+            st.session_state["t1_date"],
+            st.session_state["t1_time"],
+            st.session_state["t2_date"],
+            st.session_state["t2_time"],
+        )
+
     # 如果有共享时间范围，则作为默认值
     if "range_start_date" in st.session_state:
         st.session_state.setdefault("t1_date", st.session_state["range_start_date"])
@@ -42,17 +55,7 @@ def render_bottom_lift_page():
                 key="bl_hist_select",
             )
             if st.button("载入历史", key="bl_hist_load"):
-                params = history[idx]["params"]
-                st.session_state["t1_date"] = date.fromisoformat(params["t1_date"])
-                st.session_state["t1_time"] = time.fromisoformat(params["t1_time"])
-                st.session_state["t2_date"] = date.fromisoformat(params["t2_date"])
-                st.session_state["t2_time"] = time.fromisoformat(params["t2_time"])
-                update_shared_range(
-                    st.session_state["t1_date"],
-                    st.session_state["t1_time"],
-                    st.session_state["t2_date"],
-                    st.session_state["t2_time"],
-                )
+                st.session_state["bl_load_params"] = history[idx]["params"]
                 safe_rerun()
         else:
             st.write("暂无历史记录")
