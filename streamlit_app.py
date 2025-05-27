@@ -95,7 +95,7 @@ def require_login() -> bool:
                 fp_param = hashlib.md5(raw_id.encode()).hexdigest()
                 fingerprints[u] = fp_param
                 save_fingerprints(fingerprints)
-                st.experimental_set_query_params(fp=fp_param)
+                st.query_params["fp"] = fp_param
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             st.components.v1.html(
