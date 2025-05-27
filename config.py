@@ -25,9 +25,10 @@ _multi = os.getenv("APP_USERS")
 if _multi:
     USER_CREDENTIALS = {}
     for pair in _multi.split(","):
+        pair = pair.strip()
         if ":" in pair:
             user, pwd = pair.split(":", 1)
-            USER_CREDENTIALS[user] = pwd
+            USER_CREDENTIALS[user.strip()] = pwd.strip()
 else:
     # 兼容单用户模式
     u = os.getenv("APP_USER", "")
