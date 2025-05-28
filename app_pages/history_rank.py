@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlalchemy import text
 from db import engine_ohlcv
 from config import TZ_NAME
+from datetime import timedelta
 CSV_FILE = Path("data/rank_history.csv")
 SKIP_SYMBOLS = {"USDCUSDT", "BTCDOMUSDT"}
 
@@ -136,9 +137,26 @@ def render_history_rank():
         return
     last_time = df["time"].max().tz_convert(TZ_NAME)
     st.write(f"最后更新：{last_time.strftime('%Y-%m-%d %H:%M')}")
-    mean, med = compute_stats(df)
-    threshold = st.number_input("显示中位数<=", min_value=1, value=10)
-    symbols = [s for s in med.index if med[s] <= threshold]
+
+    # 选择时间区间，默认全选
+    min_t = df["time"].min()
+    max_t = df["time"].max()
+    start, end = st.slider(
+        "选择时间区间",
+        min_value=min_t.to_pydatetime(),
+        max_value=max_t.to_pydatetime(),
+        value=(min_t.to_pydatetime(), max_t.to_pydatetime()),
+        step=timedelta(hours=4),
+        format="YYYY-MM-DD HH:mm",
+    )
+    df_range = df[(df["time"] >= start) & (df["time"] <= end)]
+    if df_range.empty:
+        st.info("该区间无数据")
+        return
+
+    mean, med = compute_stats(df_range)
+    threshold = st.number_input("显示中位数>", min_value=0, value=10)
+    symbols = [s for s in med.index if med[s] > threshold]
     st.write("统计表")
     st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
     if not symbols:
@@ -146,7 +164,7 @@ def render_history_rank():
         return
     group_input = st.text_input("自定义分组(逗号分隔)")
     # 准备图表数据，同样使用缓存减少计算量
-    chart_data = prepare_chart_data(df, symbols, group_input)
+    chart_data = prepare_chart_data(df_range, symbols, group_input)
     base = (
         alt.Chart(chart_data)
         .mark_line(strokeWidth=1)
