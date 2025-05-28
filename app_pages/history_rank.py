@@ -188,7 +188,9 @@ def render_history_rank():
             y=alt.Y(
                 'rank:Q',
                 title='排名',
-                scale=alt.Scale(type='pow', exponent=0.5, domain=[1, max_rank], reverse=True)
+                # Increase exponent so top ranks (<30) are less spread out while
+                # lower ranks (>30) take up more space on the chart
+                scale=alt.Scale(type='pow', exponent=1.5, domain=[1, max_rank], reverse=True)
             ),
             color='symbol:N'
         )
