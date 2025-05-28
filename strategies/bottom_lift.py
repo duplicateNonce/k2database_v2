@@ -54,45 +54,55 @@ def analyze_bottom_lift(t1, t2, bars: int = 4, factor: float = 100.0) -> pd.Data
 
     for sym in symbols:
         # 查询 t1 窗口
-        df1 = pd.read_sql(sql, engine_ohlcv, params={
-            'sym': sym,
-            'start_ts': t1_start_ts,
-            'end_ts': t1_end_ts
-        })
+        df1 = pd.read_sql(
+            sql,
+            engine_ohlcv,
+            params={"sym": sym, "start_ts": t1_start_ts, "end_ts": t1_end_ts},
+        )
         if df1.empty:
-            continue
-        l1 = df1.loc[df1['low'].idxmin()]
-        # 转换 L1_time 为 Asia/Shanghai 时区 datetime
-        L1_time = pd.to_datetime(l1['time'], unit='ms', utc=True).tz_convert('Asia/Shanghai')
-        L1_low = l1['low']
+            L1_time = None
+            L1_low = None
+        else:
+            l1 = df1.loc[df1["low"].idxmin()]
+            L1_time = (
+                pd.to_datetime(l1["time"], unit="ms", utc=True)
+                .tz_convert("Asia/Shanghai")
+            )
+            L1_low = l1["low"]
 
         # 查询 t2 窗口
-        df2 = pd.read_sql(sql, engine_ohlcv, params={
-            'sym': sym,
-            'start_ts': t2_start_ts,
-            'end_ts': t2_end_ts
-        })
+        df2 = pd.read_sql(
+            sql,
+            engine_ohlcv,
+            params={"sym": sym, "start_ts": t2_start_ts, "end_ts": t2_end_ts},
+        )
         if df2.empty:
-            continue
-        l2 = df2.loc[df2['low'].idxmin()]
-        # 转换 L2_time 为 Asia/Shanghai 时区 datetime
-        L2_time = pd.to_datetime(l2['time'], unit='ms', utc=True).tz_convert('Asia/Shanghai')
-        L2_low = l2['low']
+            L2_time = None
+            L2_low = None
+        else:
+            l2 = df2.loc[df2["low"].idxmin()]
+            L2_time = (
+                pd.to_datetime(l2["time"], unit="ms", utc=True)
+                .tz_convert("Asia/Shanghai")
+            )
+            L2_low = l2["low"]
 
         # 计算对数收益斜率：ln(L2_low / L1_low) * factor
-        if L1_low > 0:
+        if L1_low is not None and L2_low is not None and L1_low > 0:
             slope = np.log(L2_low / L1_low) * factor
         else:
             slope = None
 
-        records.append({
-            'symbol': sym,
-            'L1_time': L1_time,
-            'L1_low': L1_low,
-            'L2_time': L2_time,
-            'L2_low': L2_low,
-            'slope': slope
-        })
+        records.append(
+            {
+                "symbol": sym,
+                "L1_time": L1_time,
+                "L1_low": L1_low,
+                "L2_time": L2_time,
+                "L2_low": L2_low,
+                "slope": slope,
+            }
+        )
 
     result = pd.DataFrame(records)
     if not result.empty:
