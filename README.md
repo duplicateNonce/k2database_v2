@@ -71,6 +71,7 @@ This project runs on a minimal Streamlit build that does **not** support
 instead of calling the experimental API directly.
 
 
+
 When a user logs in a fingerprint token is generated and stored in
 `data/fingerprints.json`.  The same token is saved into the browser's
 `localStorage` and also added to the page URL as the ``fp`` query
