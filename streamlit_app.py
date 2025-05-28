@@ -120,8 +120,8 @@ def require_login() -> bool:
     )
 
     # Try automatic login via fingerprint in query params
-    params = st.query_params
-    fp_param = params.get("fp")
+    params = st.experimental_get_query_params()
+    fp_param = params.get("fp", [None])[0]
     fingerprints = load_fingerprints()
     if fp_param:
         for name, fp in fingerprints.items():
@@ -149,6 +149,7 @@ def require_login() -> bool:
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             safe_rerun()
+
         else:
             st.error("用户名或密码错误")
     return False
