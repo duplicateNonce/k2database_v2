@@ -27,7 +27,11 @@ def aggregate_1d(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_history() -> pd.DataFrame:
+def load_history(mtime: float | None = None) -> pd.DataFrame:
+    """Load cached history from CSV.
+
+    The modification time of the CSV file is used as a cache key so that the
+    cache is invalidated whenever the file changes."""
     if CSV_FILE.exists():
         try:
             return pd.read_csv(CSV_FILE, parse_dates=["time"])
@@ -51,8 +55,15 @@ def prepare_chart_data(df: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
     return pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
 
 
+def _scale_rank(r: float, max_rank: int) -> float:
+    """Scale rank so 1-30 occupies 75%% of the visual range."""
+    if r <= 30:
+        return r
+    return 30 + (r - 30) * 0.25
+
+
 def update_history() -> pd.DataFrame:
-    df_hist = load_history()
+    df_hist = load_history(CSV_FILE.stat().st_mtime if CSV_FILE.exists() else None)
     last_time = None
     if not df_hist.empty:
         last_time = df_hist["time"].max()
@@ -123,7 +134,8 @@ def render_history_rank():
 
     # 缓存到 session_state，避免每次交互都重新读取文件
     if "rank_history_df" not in st.session_state:
-        st.session_state["rank_history_df"] = load_history()
+        mtime = CSV_FILE.stat().st_mtime if CSV_FILE.exists() else None
+        st.session_state["rank_history_df"] = load_history(mtime)
 
     df = st.session_state["rank_history_df"]
 
@@ -170,7 +182,7 @@ def render_history_rank():
     selected_symbols = st.multiselect(
         "选择展示的标的",
         options=symbols_all,
-        default=st.session_state.get("rank_selected_symbols", symbols_all),
+        default=st.session_state.get("rank_selected_symbols", symbols_all[:5]),
         key="rank_selected_symbols",
     )
     symbols = selected_symbols or symbols_all
@@ -180,18 +192,21 @@ def render_history_rank():
     # 准备图表数据，同样使用缓存减少计算量
     chart_data = prepare_chart_data(df_range, symbols)
     max_rank = int(df_range["rank"].max())
+    chart_data["rank_scaled"] = chart_data["rank"].apply(lambda r: _scale_rank(r, max_rank))
+    max_scaled = _scale_rank(max_rank, max_rank)
+
+    axis = alt.Axis(
+        title='排名',
+        values=[_scale_rank(v, max_rank) for v in [1,5,10,15,20,25,30,max_rank]],
+        labelExpr="datum.value <= 30 ? datum.value : round(30 + (datum.value-30)/0.25)"
+    )
+
     base = (
         alt.Chart(chart_data)
         .mark_line(strokeWidth=1)
         .encode(
             x=alt.X('time:T', title='时间', axis=alt.Axis(format='%m/%d')),
-            y=alt.Y(
-                'rank:Q',
-                title='排名',
-                # Increase exponent so top ranks (<30) are less spread out while
-                # lower ranks (>30) take up more space on the chart
-                scale=alt.Scale(type='pow', exponent=1.5, domain=[1, max_rank], reverse=True)
-            ),
+            y=alt.Y('rank_scaled:Q', scale=alt.Scale(domain=[1, max_scaled], reverse=True), axis=axis),
             color='symbol:N'
         )
     )
