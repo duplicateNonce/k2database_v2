@@ -2,7 +2,7 @@ import streamlit as st
 from app_pages.overview import render_overview
 from app_pages.ohlcv import render_ohlcv_page
 # from app_pages.strong_assets import render_strong_assets_page
-# from app_pages.bottom_lift import render_bottom_lift_page
+from app_pages.bottom_lift import render_bottom_lift_page
 from app_pages.label_assets import render_label_assets_page
 # from app_pages.price_change_by_label import render_price_change_by_label
 from app_pages.combined_analysis import render_combined_page
@@ -18,9 +18,8 @@ PAGES = {
     "历史排名": render_history_rank,
     "综合分析": render_combined_page,
     # "强势标的筛选": render_strong_assets_page,
-    # "底部抬升筛选": render_bottom_lift_page,
+    "底部抬升筛选": render_bottom_lift_page,
     # "标签化涨跌幅": render_price_change_by_label,
-    "自选跟踪": render_watchlist_page,
     "自选标的": render_watchlist_page,
 }
 # 动态添加
