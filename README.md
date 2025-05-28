@@ -70,6 +70,7 @@ This project runs on a minimal Streamlit build that does **not** support
 `st.experimental_rerun`.  Use the helper `safe_rerun()` from `utils.py`
 instead of calling the experimental API directly.
 
+
 When a user logs in a fingerprint token is generated and stored in
 `data/fingerprints.json`.  The same token is saved into the browser's
 `localStorage` and also added to the page URL as the ``fp`` query
@@ -78,6 +79,7 @@ the URL so the user logs in automatically, even after closing the tab or
 browser.  Each account is limited to a single fingerprint; if the same
 user attempts to log in from another device the app returns
 ``ERROR 01``.
+
 
 For best security, deploy the app behind HTTPS so the browser does not
 flag the page as insecure.
