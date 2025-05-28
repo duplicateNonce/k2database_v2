@@ -7,6 +7,7 @@ from app_pages.label_assets import render_label_assets_page
 # from app_pages.price_change_by_label import render_price_change_by_label
 from app_pages.combined_analysis import render_combined_page
 from app_pages.watchlist import render_watchlist_page
+from app_pages.history_rank import render_history_rank
 
 from login import require_login, logout
 from utils import safe_rerun
@@ -14,6 +15,7 @@ from utils import safe_rerun
 PAGES = {
     "Overview": render_overview,
     "OHLCV": render_ohlcv_page,
+    "历史排名": render_history_rank,
     "综合分析": render_combined_page,
     # "强势标的筛选": render_strong_assets_page,
     # "底部抬升筛选": render_bottom_lift_page,
