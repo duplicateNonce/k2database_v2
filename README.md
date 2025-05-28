@@ -70,6 +70,10 @@ This project runs on a minimal Streamlit build that does **not** support
 `st.experimental_rerun`.  Use the helper `safe_rerun()` from `utils.py`
 instead of calling the experimental API directly.
 
+Streamlit has also deprecated `st.experimental_get_query_params` in favor of
+`st.query_params`.  The codebase already uses the new API, so contributors
+should avoid the old function to prevent deprecation warnings.
+
 
 
 When a user logs in for the first time a random **device ID** is
