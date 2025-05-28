@@ -1,11 +1,13 @@
 import json
+import hashlib
 from pathlib import Path
-from uuid import uuid4
 
 import streamlit as st
 
 from config import USER_CREDENTIALS
 from utils import safe_rerun
+
+SALT = "@@@"
 
 TOKEN_FILE = Path("data/tokens.json")
 
@@ -24,6 +26,19 @@ def _save_tokens(tokens: dict) -> None:
     TOKEN_FILE.write_text(json.dumps(tokens))
 
 
+def _compute_token(username: str, password: str) -> str:
+    """Return MD5(username + password + SALT)."""
+    return hashlib.md5(f"{username}{password}{SALT}".encode()).hexdigest()
+
+
+def _store_token(token: str) -> None:
+    """Save token into localStorage."""
+    st.components.v1.html(
+        f"<script>window.localStorage.setItem('deviceToken', '{token}');</script>",
+        height=0,
+    )
+
+
 def _ensure_token_param() -> str | None:
     """Return device token from query params or localStorage."""
     st.components.v1.html(
@@ -31,11 +46,8 @@ def _ensure_token_param() -> str | None:
         <script>
         (function() {
             const params = new URLSearchParams(window.location.search);
-            let token = window.localStorage.getItem('deviceToken');
-            if (!token) {
-                token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-                window.localStorage.setItem('deviceToken', token);
-            }
+            const token = window.localStorage.getItem('deviceToken');
+            if (!token) return;
             if (params.get('tok') !== token) {
                 params.set('tok', token);
                 window.location.search = params.toString();
@@ -70,14 +82,10 @@ def require_login() -> bool:
     p = st.text_input("密码", type="password")
     if st.button("登录"):
         if USER_CREDENTIALS.get(u) == p:
-            existing = tokens.get(u)
-            if existing and existing != token:
-                st.error("ERROR 01")
-                return False
-            if not existing:
-                token = token or uuid4().hex
-                tokens[u] = token
-                _save_tokens(tokens)
+            token = _compute_token(u, p)
+            tokens[u] = token
+            _save_tokens(tokens)
+            _store_token(token)
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             safe_rerun()
@@ -88,4 +96,5 @@ def require_login() -> bool:
 
 def logout() -> None:
     st.session_state.clear()
+    _store_token("")
     safe_rerun()

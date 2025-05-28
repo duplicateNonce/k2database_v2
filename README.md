@@ -72,14 +72,11 @@ instead of calling the experimental API directly.
 
 
 
-When a user logs in a device token is generated and stored in
-`data/tokens.json`.  The same token is saved into the browser's
-`localStorage` and also added to the page URL as the ``tok`` query
-parameter.  On later visits the token in ``localStorage`` is appended to
-the URL so the user logs in automatically, even after closing the tab or
-browser.  Each account is limited to a single token; if the same
-user attempts to log in from another device the app returns
-``ERROR 01``.
+When a user logs in a token is generated from the MD5 hash of
+``username + password + '@@@'``.  This value is stored in
+``data/tokens.json`` and in the browser's ``localStorage``.  The token is
+also added to the page URL as the ``tok`` query parameter so returning
+visits can skip the login form automatically.
 
 
 For best security, deploy the app behind HTTPS so the browser does not
