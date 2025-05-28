@@ -11,17 +11,17 @@ CSV_FILE = Path("data/rank_history.csv")
 SKIP_SYMBOLS = {"USDCUSDT", "BTCDOMUSDT"}
 
 
-def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
+def aggregate_1d(df: pd.DataFrame) -> pd.DataFrame:
     df = df.set_index("dt").sort_index()
-    counts = df["open"].resample("4H").count()
-    complete = counts[counts == 16].index
+    counts = df["open"].resample("24H").count()
+    complete = counts[counts == 96].index
     if complete.empty:
         return pd.DataFrame()
-    o = df["open"].resample("4H").first().loc[complete]
-    h = df["high"].resample("4H").max().loc[complete]
-    l = df["low"].resample("4H").min().loc[complete]
-    c = df["close"].resample("4H").last().loc[complete]
-    v = df["volume_usd"].resample("4H").sum().loc[complete]
+    o = df["open"].resample("24H").first().loc[complete]
+    h = df["high"].resample("24H").max().loc[complete]
+    l = df["low"].resample("24H").min().loc[complete]
+    c = df["close"].resample("24H").last().loc[complete]
+    v = df["volume_usd"].resample("24H").sum().loc[complete]
     res = pd.DataFrame({"start": complete, "open": o, "high": h, "low": l, "close": c, "volume": v})
     return res.reset_index(drop=True)
 
@@ -74,7 +74,7 @@ def update_history() -> pd.DataFrame:
             )
             params = {"sym": sym}
         else:
-            start_ms = int(last_time.tz_convert("UTC").timestamp() * 1000) - 16 * 15 * 60 * 1000
+            start_ms = int(last_time.tz_convert("UTC").timestamp() * 1000) - 96 * 15 * 60 * 1000
             sql = text(
                 "SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym AND time >= :s ORDER BY time"
             )
@@ -84,15 +84,15 @@ def update_history() -> pd.DataFrame:
         if df.empty:
             return None
         df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(TZ_NAME)
-        df4h = aggregate_4h(df)
-        # 使用相邻 4H 收盘价计算涨幅
-        df4h["change"] = df4h["close"].pct_change()
+        df1d = aggregate_1d(df)
+        # 使用相邻 1D 收盘价计算涨幅
+        df1d["change"] = df1d["close"].pct_change()
         if last_time is not None:
-            df4h = df4h[df4h["start"] > last_time]
-        if df4h.empty:
+            df1d = df1d[df1d["start"] > last_time]
+        if df1d.empty:
             return None
-        df4h["symbol"] = sym
-        return df4h[["start", "symbol", "change"]]
+        df1d["symbol"] = sym
+        return df1d[["start", "symbol", "change"]]
 
     with engine_ohlcv.connect() as conn:
         syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
@@ -155,8 +155,8 @@ def render_history_rank():
         min_value=min_t.to_pydatetime(),
         max_value=max_t.to_pydatetime(),
         value=(min_t.to_pydatetime(), max_t.to_pydatetime()),
-        step=timedelta(hours=4),
-        format="YYYY-MM-DD HH:mm",
+        step=timedelta(days=1),
+        format="YYYY-MM-DD",
     )
     df_range = df[(df["time"] >= start) & (df["time"] <= end)]
     if df_range.empty:
