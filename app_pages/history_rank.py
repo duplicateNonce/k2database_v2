@@ -44,16 +44,9 @@ def compute_stats(df: pd.DataFrame):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_chart_data(df: pd.DataFrame, symbols: list[str], group_input: str) -> pd.DataFrame:
+def prepare_chart_data(df: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
     """Prepare pivoted data used for the chart."""
     chart_df = df[df["symbol"].isin(symbols)].copy()
-    if group_input.strip():
-        syms = [s.strip() for s in group_input.split(',') if s.strip()]
-        sub = chart_df[chart_df["symbol"].isin(syms)]
-        if not sub.empty:
-            grp = sub.groupby("time")["rank"].mean().reset_index()
-            grp["symbol"] = "自定义组"
-            chart_df = pd.concat([chart_df, grp], ignore_index=True)
     pivot = chart_df.pivot(index="time", columns="symbol", values="rank")
     return pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
 
@@ -164,40 +157,39 @@ def render_history_rank():
         return
 
     mean, med = compute_stats(df_range)
-    threshold = st.number_input(
-        "显示中位数<=",
-        min_value=0,
-        value=st.session_state.get("rank_threshold", 10),
-        key="rank_threshold",
+    symbols_all = sorted(med.index)
+    hide_low = st.checkbox(
+        "隐去期间内从未到达过前30的标的",
+        value=st.session_state.get("rank_hide_low", False),
+        key="rank_hide_low",
     )
-    symbols = [s for s in med.index if med[s] <= threshold]
+    if hide_low:
+        min_rank = df_range.groupby("symbol")["rank"].min()
+        symbols_all = [s for s in symbols_all if min_rank.get(s, float("inf")) <= 30]
 
     selected_symbols = st.multiselect(
         "选择展示的标的",
-        options=symbols,
-        default=st.session_state.get("rank_selected_symbols", symbols),
+        options=symbols_all,
+        default=st.session_state.get("rank_selected_symbols", symbols_all),
         key="rank_selected_symbols",
     )
-    if selected_symbols:
-        symbols = selected_symbols
-    st.write("统计表")
-    st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
+    symbols = selected_symbols or symbols_all
     if not symbols:
         st.info("无满足条件的标的")
         return
-    group_input = st.text_input(
-        "自定义分组(逗号分隔)",
-        value=st.session_state.get("rank_group", ""),
-        key="rank_group",
-    )
     # 准备图表数据，同样使用缓存减少计算量
-    chart_data = prepare_chart_data(df_range, symbols, group_input)
+    chart_data = prepare_chart_data(df_range, symbols)
+    max_rank = int(df_range["rank"].max())
     base = (
         alt.Chart(chart_data)
         .mark_line(strokeWidth=1)
         .encode(
-            x=alt.X('time:T', title='时间'),
-            y=alt.Y('rank:Q', title='排名', scale=alt.Scale(domain=[1, 408], reverse=True)),
+            x=alt.X('time:T', title='时间', axis=alt.Axis(format='%m/%d')),
+            y=alt.Y(
+                'rank:Q',
+                title='排名',
+                scale=alt.Scale(type='pow', exponent=0.5, domain=[1, max_rank], reverse=True)
+            ),
             color='symbol:N'
         )
     )
@@ -208,3 +200,5 @@ def render_history_rank():
     )
     chart = base.properties(height=600 if enlarged else 400).interactive()
     st.altair_chart(chart, use_container_width=True)
+    st.write("统计表")
+    st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
