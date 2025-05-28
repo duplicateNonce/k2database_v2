@@ -72,11 +72,15 @@ instead of calling the experimental API directly.
 
 
 
-When a user logs in a token is generated from the MD5 hash of
-``username + password + '@@@'``.  This value is stored in
-``data/tokens.json`` and in the browser's ``localStorage``.  The token is
-also added to the page URL as the ``tok`` query parameter so returning
-visits can skip the login form automatically.
+When a user logs in for the first time a random **device ID** is
+generated (using ``uuid4``).  The ID is stored in ``data/tokens.json`` and
+in the browser's ``localStorage``.  It is also appended to the page URL
+as the ``tok`` query parameter so returning visits can skip the login
+form automatically.
+
+Only one browser may be logged in per username.  If a device ID already
+exists for a user, any new login attempt is rejected with ``error 01``.
+Logging out removes the stored ID so another browser can register.
 
 
 For best security, deploy the app behind HTTPS so the browser does not
