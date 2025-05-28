@@ -95,18 +95,20 @@ def require_login() -> bool:
                 fp_param = hashlib.md5(raw_id.encode()).hexdigest()
                 fingerprints[u] = fp_param
                 save_fingerprints(fingerprints)
-                st.query_params["fp"] = fp_param
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             st.components.v1.html(
                 f"""
                 <script>
+                const params = new URLSearchParams(window.location.search);
+                params.set('fp', '{fp_param}');
                 window.localStorage.setItem('deviceId', '{fp_param}');
+                window.location.search = params.toString();
                 </script>
                 """,
                 height=0,
             )
-            safe_rerun()
+            st.stop()
         else:
             st.error("用户名或密码错误")
     return False

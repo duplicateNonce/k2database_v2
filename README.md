@@ -72,6 +72,11 @@ instead of calling the experimental API directly.
 
 When a user logs in successfully a fingerprint token is stored in
 `data/fingerprints.json`.  The token is also written to the URL as a
-query parameter.  If the browser reloads the app with this token it will
-log in automatically.  Each account is limited to a single fingerprint;
-attempting to log in from another browser yields `ERROR 01`.
+query parameter and saved to `localStorage`.  If the browser reloads the
+app (even after closing the tab) the stored token is restored to the URL
+so the user logs in automatically.  Each account is limited to a single
+fingerprint; attempting to log in from another browser yields
+`ERROR 01`.
+
+For best security, deploy the app behind HTTPS so the browser does not
+flag the page as insecure.
