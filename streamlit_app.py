@@ -59,7 +59,7 @@ def require_login() -> bool:
             const stored = window.localStorage.getItem(key);
             if (stored && !params.get('fp')) {
                 params.set('fp', stored);
-                window.location.search = params.toString();
+                window.location.search = '?' + params.toString();
             }
         })();
         </script>
@@ -68,8 +68,8 @@ def require_login() -> bool:
     )
 
     # Try automatic login via fingerprint in query params
-    params = st.query_params
-    fp_param = params.get("fp")
+    params = st.experimental_get_query_params()
+    fp_param = params.get("fp", [None])[0]
     fingerprints = load_fingerprints()
     if fp_param:
         for name, fp in fingerprints.items():
@@ -95,9 +95,9 @@ def require_login() -> bool:
                 fp_param = hashlib.md5(raw_id.encode()).hexdigest()
                 fingerprints[u] = fp_param
                 save_fingerprints(fingerprints)
-                st.query_params["fp"] = fp_param
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
+            st.experimental_set_query_params(fp=fp_param)
             st.components.v1.html(
                 f"""
                 <script>
