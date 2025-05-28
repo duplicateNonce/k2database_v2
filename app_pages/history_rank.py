@@ -1,5 +1,7 @@
 import pandas as pd
 import streamlit as st
+import altair as alt
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from sqlalchemy import text
 from db import engine_ohlcv
@@ -41,32 +43,43 @@ def update_history() -> pd.DataFrame:
         if not pd.api.types.is_datetime64_any_dtype(df_hist["time"]):
             last_time = pd.to_datetime(last_time)
     records = []
+
+    def fetch_history(sym: str):
+        if last_time is None:
+            sql = text(
+                "SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym ORDER BY time"
+            )
+            params = {"sym": sym}
+        else:
+            start_ms = int(last_time.tz_convert("UTC").timestamp() * 1000) - 16 * 15 * 60 * 1000
+            sql = text(
+                "SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym AND time >= :s ORDER BY time"
+            )
+            params = {"sym": sym, "s": start_ms}
+        with engine_ohlcv.connect() as conn:
+            df = pd.read_sql(sql, conn, params=params)
+        if df.empty:
+            return None
+        df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(TZ_NAME)
+        df4h = aggregate_4h(df)
+        if last_time is not None:
+            df4h = df4h[df4h["start"] > last_time]
+        if df4h.empty:
+            return None
+        df4h["symbol"] = sym
+        df4h["change"] = df4h["close"] / df4h["open"] - 1
+        return df4h[["start", "symbol", "change"]]
+
     with engine_ohlcv.connect() as conn:
         syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
-        syms = [s for s in syms if s not in SKIP_SYMBOLS]
-        for sym in syms:
-            if last_time is None:
-                sql = text("SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym ORDER BY time")
-                params = {"sym": sym}
-            else:
-                start_ms = int(last_time.tz_convert("UTC").timestamp() * 1000) - 16 * 15 * 60 * 1000
-                sql = text(
-                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
-                    "WHERE symbol=:sym AND time >= :s ORDER BY time"
-                )
-                params = {"sym": sym, "s": start_ms}
-            df = pd.read_sql(sql, conn, params=params)
-            if df.empty:
-                continue
-            df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(TZ_NAME)
-            df4h = aggregate_4h(df)
-            if last_time is not None:
-                df4h = df4h[df4h["start"] > last_time]
-            if df4h.empty:
-                continue
-            df4h["symbol"] = sym
-            df4h["change"] = df4h["close"] / df4h["open"] - 1
-            records.append(df4h[["start", "symbol", "change"]])
+    syms = [s for s in syms if s not in SKIP_SYMBOLS]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(fetch_history, sym) for sym in syms]
+        for fut in futures:
+            res = fut.result()
+            if res is not None:
+                records.append(res)
     if not records:
         return df_hist
     df_new = pd.concat(records, ignore_index=True)
@@ -113,4 +126,16 @@ def render_history_rank():
             grp["symbol"] = "自定义组"
             chart_df = pd.concat([chart_df, grp], ignore_index=True)
     pivot = chart_df.pivot(index="time", columns="symbol", values="rank")
-    st.line_chart(pivot)
+    chart_data = pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
+    base = (
+        alt.Chart(chart_data)
+        .mark_line(strokeWidth=1)
+        .encode(
+            x=alt.X('time:T', title='时间'),
+            y=alt.Y('rank:Q', title='排名'),
+            color='symbol:N'
+        )
+    )
+    enlarged = st.checkbox('放大图表')
+    chart = base.properties(height=600 if enlarged else 400).interactive()
+    st.altair_chart(chart, use_container_width=True)
