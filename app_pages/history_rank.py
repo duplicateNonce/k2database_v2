@@ -107,7 +107,12 @@ def update_history() -> pd.DataFrame:
     if not records:
         return df_hist
     df_new = pd.concat(records, ignore_index=True)
-    df_new["rank"] = df_new.groupby("start")["change"].rank(ascending=False, method="min").astype(int)
+    # drop rows where change is NaN before ranking
+    df_new = df_new.dropna(subset=["change"])
+    df_new["rank"] = (
+        df_new.groupby("start")["change"].rank(ascending=False, method="min")
+        .astype(int)
+    )
     df_new = df_new.rename(columns={"start": "time"})
     if df_hist.empty:
         df_res = df_new
