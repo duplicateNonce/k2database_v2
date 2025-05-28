@@ -1,13 +1,12 @@
 import json
-import hashlib
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 
 from config import USER_CREDENTIALS
 from utils import safe_rerun
-
-SALT = "@@@"
 
 TOKEN_FILE = Path("data/tokens.json")
 
@@ -26,9 +25,9 @@ def _save_tokens(tokens: dict) -> None:
     TOKEN_FILE.write_text(json.dumps(tokens))
 
 
-def _compute_token(username: str, password: str) -> str:
-    """Return MD5(username + password + SALT)."""
-    return hashlib.md5(f"{username}{password}{SALT}".encode()).hexdigest()
+def _generate_device_id() -> str:
+    """Return a new random device identifier."""
+    return uuid.uuid4().hex
 
 
 def _store_token(token: str) -> None:
@@ -58,8 +57,8 @@ def _ensure_token_param() -> str | None:
         height=0,
     )
 
-    params = st.experimental_get_query_params()
-    return params.get("tok", [None])[0]
+    params = st.query_params
+    return params.get("tok")
 
 
 def require_login() -> bool:
@@ -68,11 +67,17 @@ def require_login() -> bool:
 
     # automatic login if token matches a stored user
     if token:
-        for name, t in tokens.items():
-            if t == token:
-                st.session_state["logged_in"] = True
-                st.session_state["username"] = name
-                return True
+        for name, info in tokens.items():
+            if isinstance(info, dict):
+                if info.get("device_id") == token:
+                    st.session_state["logged_in"] = True
+                    st.session_state["username"] = name
+                    return True
+            else:  # backward compatibility with old token format
+                if info == token:
+                    st.session_state["logged_in"] = True
+                    st.session_state["username"] = name
+                    return True
 
     if st.session_state.get("logged_in"):
         return True
@@ -82,10 +87,13 @@ def require_login() -> bool:
     p = st.text_input("密码", type="password")
     if st.button("登录"):
         if USER_CREDENTIALS.get(u) == p:
-            token = _compute_token(u, p)
-            tokens[u] = token
+            device_id = _generate_device_id()
+            tokens[u] = {
+                "device_id": device_id,
+                "created": datetime.utcnow().isoformat()
+            }
             _save_tokens(tokens)
-            _store_token(token)
+            _store_token(device_id)
             st.session_state["logged_in"] = True
             st.session_state["username"] = u
             safe_rerun()
