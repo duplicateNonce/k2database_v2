@@ -127,11 +127,20 @@ def update_history() -> pd.DataFrame:
 
 def render_history_rank():
     st.title("历史排名")
-    df = load_history()
-    if st.button("刷新数据"):
-        with st.spinner("更新中..."):
-            df = update_history()
-            st.success("已更新")
+
+    # 缓存到 session_state，避免每次交互都重新读取文件
+    if "rank_history_df" not in st.session_state:
+        st.session_state["rank_history_df"] = load_history()
+
+    df = st.session_state["rank_history_df"]
+
+    # 将数据刷新入口放在折叠面板中，刷新后更新 session_state
+    with st.expander("数据刷新", expanded=df.empty):
+        if st.button("刷新数据"):
+            with st.spinner("更新中..."):
+                df = update_history()
+                st.session_state["rank_history_df"] = df
+                st.success("已更新")
     if df.empty:
         st.info("暂无数据")
         return
@@ -155,14 +164,23 @@ def render_history_rank():
         return
 
     mean, med = compute_stats(df_range)
-    threshold = st.number_input("显示中位数>", min_value=0, value=10)
+    threshold = st.number_input(
+        "显示中位数>",
+        min_value=0,
+        value=st.session_state.get("rank_threshold", 10),
+        key="rank_threshold",
+    )
     symbols = [s for s in med.index if med[s] > threshold]
     st.write("统计表")
     st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
     if not symbols:
         st.info("无满足条件的标的")
         return
-    group_input = st.text_input("自定义分组(逗号分隔)")
+    group_input = st.text_input(
+        "自定义分组(逗号分隔)",
+        value=st.session_state.get("rank_group", ""),
+        key="rank_group",
+    )
     # 准备图表数据，同样使用缓存减少计算量
     chart_data = prepare_chart_data(df_range, symbols, group_input)
     base = (
@@ -174,6 +192,10 @@ def render_history_rank():
             color='symbol:N'
         )
     )
-    enlarged = st.checkbox('放大图表')
+    enlarged = st.checkbox(
+        "放大图表",
+        value=st.session_state.get("rank_enlarged", False),
+        key="rank_enlarged",
+    )
     chart = base.properties(height=600 if enlarged else 400).interactive()
     st.altair_chart(chart, use_container_width=True)
