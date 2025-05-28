@@ -38,11 +38,12 @@ def get_mappings():
     return df.explode('labels').dropna(subset=['labels']).rename(columns={'labels':'label'})[['symbol','label']]
 
 def compute_period_metrics(symbol, start_ts, end_ts):
+    """Return percentage change and drawdown for the given period."""
     try:
         with engine_ohlcv.connect() as conn:
             df = pd.read_sql(
                 text(
-                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
+                    "SELECT time, high, low, close FROM ohlcv "
                     "WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
                 ),
                 conn,
@@ -52,24 +53,14 @@ def compute_period_metrics(symbol, start_ts, end_ts):
         if df.empty:
             return None, None
 
-        df['dt'] = pd.to_datetime(df['time'], unit='ms', utc=True)
-        df = df.set_index('dt').sort_index()
-        counts = df['open'].resample('4H').count()
-        complete = counts[counts == 16].index
-        if complete.empty:
-            return None, None
-        o = df['open'].resample('4H').first().loc[complete]
-        c = df['close'].resample('4H').last().loc[complete]
-        h = df['high'].resample('4H').max().loc[complete]
-        l = df['low'].resample('4H').min().loc[complete]
-        v = df['volume_usd'].resample('4H').sum().loc[complete]
-        agg = pd.DataFrame({'open': o, 'high': h, 'low': l, 'close': c, 'volume_usd': v})
-        first_o = agg['open'].iat[0]
-        last_c = agg['close'].iat[-1]
-        ret = last_c / first_o - 1 if first_o else None
-        peak = agg['high'].max()
-        trough = agg['low'].min()
+        first_close = df["close"].iat[0]
+        last_close = df["close"].iat[-1]
+        ret = last_close / first_close - 1 if first_close else None
+
+        peak = df["high"].max()
+        trough = df["low"].min()
         dd = (peak - trough) / peak if peak else None
+
         return ret, dd
     except Exception:
         return None, None
