@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlalchemy import text
 from db import engine_ohlcv
 from config import TZ_NAME
+import numpy as np
 CSV_FILE = Path("data/rank_history.csv")
 SKIP_SYMBOLS = {"USDCUSDT", "BTCDOMUSDT"}
 
@@ -35,6 +36,28 @@ def load_history() -> pd.DataFrame:
     return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False)
+def compute_stats(df: pd.DataFrame):
+    med = df.groupby("symbol")["rank"].median()
+    mean = df.groupby("symbol")["rank"].mean()
+    return mean, med
+
+
+@st.cache_data(show_spinner=False)
+def prepare_chart_data(df: pd.DataFrame, symbols: list[str], group_input: str) -> pd.DataFrame:
+    """Prepare pivoted data used for the chart."""
+    chart_df = df[df["symbol"].isin(symbols)].copy()
+    if group_input.strip():
+        syms = [s.strip() for s in group_input.split(',') if s.strip()]
+        sub = chart_df[chart_df["symbol"].isin(syms)]
+        if not sub.empty:
+            grp = sub.groupby("time")["rank"].mean().reset_index()
+            grp["symbol"] = "自定义组"
+            chart_df = pd.concat([chart_df, grp], ignore_index=True)
+    pivot = chart_df.pivot(index="time", columns="symbol", values="rank")
+    return pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
+
+
 def update_history() -> pd.DataFrame:
     df_hist = load_history()
     last_time = None
@@ -62,19 +85,21 @@ def update_history() -> pd.DataFrame:
             return None
         df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(TZ_NAME)
         df4h = aggregate_4h(df)
+        df4h["change"] = df4h["close"].pct_change()
         if last_time is not None:
             df4h = df4h[df4h["start"] > last_time]
+        df4h = df4h[np.isfinite(df4h["change"])]
         if df4h.empty:
             return None
         df4h["symbol"] = sym
-        df4h["change"] = df4h["close"] / df4h["open"] - 1
         return df4h[["start", "symbol", "change"]]
 
     with engine_ohlcv.connect() as conn:
         syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
     syms = [s for s in syms if s not in SKIP_SYMBOLS]
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # 使用更多线程提高增量更新速度
+    with ThreadPoolExecutor(max_workers=10) as pool:
         futures = [pool.submit(fetch_history, sym) for sym in syms]
         for fut in futures:
             res = fut.result()
@@ -83,6 +108,7 @@ def update_history() -> pd.DataFrame:
     if not records:
         return df_hist
     df_new = pd.concat(records, ignore_index=True)
+    df_new = df_new[np.isfinite(df_new["change"])]
     df_new["rank"] = df_new.groupby("start")["change"].rank(ascending=False, method="min").astype(int)
     df_new = df_new.rename(columns={"start": "time"})
     if df_hist.empty:
@@ -107,8 +133,7 @@ def render_history_rank():
         return
     last_time = df["time"].max().tz_convert(TZ_NAME)
     st.write(f"最后更新：{last_time.strftime('%Y-%m-%d %H:%M')}")
-    med = df.groupby("symbol")["rank"].median()
-    mean = df.groupby("symbol")["rank"].mean()
+    mean, med = compute_stats(df)
     threshold = st.number_input("显示中位数<=", min_value=1, value=10)
     symbols = [s for s in med.index if med[s] <= threshold]
     st.write("统计表")
@@ -117,16 +142,8 @@ def render_history_rank():
         st.info("无满足条件的标的")
         return
     group_input = st.text_input("自定义分组(逗号分隔)")
-    chart_df = df[df["symbol"].isin(symbols)].copy()
-    if group_input.strip():
-        syms = [s.strip() for s in group_input.split(',') if s.strip()]
-        sub = chart_df[chart_df["symbol"].isin(syms)]
-        if not sub.empty:
-            grp = sub.groupby("time")["rank"].mean().reset_index()
-            grp["symbol"] = "自定义组"
-            chart_df = pd.concat([chart_df, grp], ignore_index=True)
-    pivot = chart_df.pivot(index="time", columns="symbol", values="rank")
-    chart_data = pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
+    # 准备图表数据，同样使用缓存减少计算量
+    chart_data = prepare_chart_data(df, symbols, group_input)
     base = (
         alt.Chart(chart_data)
         .mark_line(strokeWidth=1)
