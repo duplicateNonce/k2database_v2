@@ -234,7 +234,7 @@ def render_history_rank():
 
             y=alt.Y(
                 'rank_scaled:Q',
-                scale=alt.Scale(domain=[1, 0], nice=False),
+                scale=alt.Scale(domain=[0, 1], reverse=True, nice=False),
                 axis=axis,
             ),
 
