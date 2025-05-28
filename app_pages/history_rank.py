@@ -109,8 +109,8 @@ def render_history_rank():
     st.write(f"最后更新：{last_time.strftime('%Y-%m-%d %H:%M')}")
     med = df.groupby("symbol")["rank"].median()
     mean = df.groupby("symbol")["rank"].mean()
-    threshold = st.number_input("显示中位数>=", min_value=1, value=10)
-    symbols = [s for s in med.index if med[s] >= threshold]
+    threshold = st.number_input("显示中位数<=", min_value=1, value=10)
+    symbols = [s for s in med.index if med[s] <= threshold]
     st.write("统计表")
     st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
     if not symbols:
@@ -132,7 +132,7 @@ def render_history_rank():
         .mark_line(strokeWidth=1)
         .encode(
             x=alt.X('time:T', title='时间'),
-            y=alt.Y('rank:Q', title='排名'),
+            y=alt.Y('rank:Q', title='排名', scale=alt.Scale(domain=[1, 408], reverse=True)),
             color='symbol:N'
         )
     )
