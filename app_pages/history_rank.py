@@ -84,12 +84,13 @@ def update_history() -> pd.DataFrame:
             return None
         df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True).dt.tz_convert(TZ_NAME)
         df4h = aggregate_4h(df)
+        # 使用相邻 4H 收盘价计算涨幅
+        df4h["change"] = df4h["close"].pct_change()
         if last_time is not None:
             df4h = df4h[df4h["start"] > last_time]
         if df4h.empty:
             return None
         df4h["symbol"] = sym
-        df4h["change"] = df4h["close"] / df4h["open"] - 1
         return df4h[["start", "symbol", "change"]]
 
     with engine_ohlcv.connect() as conn:
