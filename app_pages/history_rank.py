@@ -56,10 +56,21 @@ def prepare_chart_data(df: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
 
 
 def _scale_rank(r: float, max_rank: int) -> float:
-    """Scale rank so 1-30 occupies 75%% of the visual range."""
+    """Scale rank so 1-30 occupies 75%% of the visual range.
+
+    The returned value is normalised to ``[0, 1]`` so that it can be used as
+    the y coordinate directly in Altair charts.  When ``max_rank`` is less than
+    or equal to 30 no compression is applied and the range is mapped linearly.
+    """
+
+    if max_rank <= 30:
+        if max_rank > 1:
+            return (r - 1) / (max_rank - 1)
+        return 0.0
+
     if r <= 30:
-        return r
-    return 30 + (r - 30) * 0.25
+        return (r - 1) / 29 * 0.75
+    return 0.75 + (r - 30) / (max_rank - 30) * 0.25
 
 
 def update_history() -> pd.DataFrame:
@@ -193,20 +204,30 @@ def render_history_rank():
     chart_data = prepare_chart_data(df_range, symbols)
     max_rank = int(df_range["rank"].max())
     chart_data["rank_scaled"] = chart_data["rank"].apply(lambda r: _scale_rank(r, max_rank))
-    max_scaled = _scale_rank(max_rank, max_rank)
 
-    axis = alt.Axis(
-        title='排名',
-        values=[_scale_rank(v, max_rank) for v in [1,5,10,15,20,25,30,max_rank]],
-        labelExpr="datum.value <= 30 ? datum.value : round(30 + (datum.value-30)/0.25)"
-    )
+    if max_rank <= 30:
+        tick_values = list(range(1, max_rank + 1))
+        axis = alt.Axis(
+            title='排名',
+            values=[_scale_rank(v, max_rank) for v in tick_values],
+            labelExpr=f"Math.round(datum.value * ({max_rank - 1}) + 1)"
+        )
+    else:
+        tick_values = [v for v in [1,5,10,15,20,25,30] if v <= max_rank]
+        if max_rank not in tick_values:
+            tick_values.append(max_rank)
+        axis = alt.Axis(
+            title='排名',
+            values=[_scale_rank(v, max_rank) for v in tick_values],
+            labelExpr=f"datum.value <= 0.75 ? Math.round(datum.value / 0.75 * 29 + 1) : Math.round(30 + (datum.value - 0.75) / 0.25 * {max_rank - 30})"
+        )
 
     base = (
         alt.Chart(chart_data)
         .mark_line(strokeWidth=1)
         .encode(
             x=alt.X('time:T', title='时间', axis=alt.Axis(format='%m/%d')),
-            y=alt.Y('rank_scaled:Q', scale=alt.Scale(domain=[1, max_scaled], reverse=True), axis=axis),
+            y=alt.Y('rank_scaled:Q', scale=alt.Scale(domain=[0, 1], reverse=True), axis=axis),
             color='symbol:N'
         )
     )
