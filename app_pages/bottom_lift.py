@@ -138,14 +138,14 @@ def render_bottom_lift_page():
             lambda s: "，".join(labels_map.get(s, [])) if labels_map.get(s) else ""
         )
 
-        # 格式化 L1_time 与 L2_time 为 MM-DD HH:MM
+        # 格式化时间列，缺失值保持为空
         df["L1_time"] = (
-            pd.to_datetime(df["L1_time"], utc=True)
+            pd.to_datetime(df["L1_time"], utc=True, errors="coerce")
             .dt.tz_convert("Asia/Shanghai")
             .dt.strftime("%m-%d %H:%M")
         )
         df["L2_time"] = (
-            pd.to_datetime(df["L2_time"], utc=True)
+            pd.to_datetime(df["L2_time"], utc=True, errors="coerce")
             .dt.tz_convert("Asia/Shanghai")
             .dt.strftime("%m-%d %H:%M")
         )
@@ -157,8 +157,11 @@ def render_bottom_lift_page():
         df = df[["标签", "symbol", "L1_time", "L1_low", "L2_time", "L2_low", "slope"]]
         df = df.rename(columns={"symbol": "代币名字"})
 
-        # 按 slope 降序排序
-        df = df.sort_values("slope", ascending=False).reset_index(drop=True)
+        # 按 slope 降序排序，NaN 排在最后
+        df = (
+            df.sort_values("slope", ascending=False, na_position="last")
+            .reset_index(drop=True)
+        )
 
         # 展示结果表格，动态调整高度以显示所有行
         row_height = 35  # approximate pixels per row
