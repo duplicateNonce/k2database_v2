@@ -51,6 +51,9 @@ def compute_stats(df: pd.DataFrame):
 def prepare_chart_data(df: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
     """Prepare pivoted data used for the chart."""
     chart_df = df[df["symbol"].isin(symbols)].copy()
+    # Altair cannot handle timezone-aware datetimes. Drop timezone info if present
+    if pd.api.types.is_datetime64_any_dtype(chart_df["time"]) and getattr(chart_df["time"].dtype, "tz", None):
+        chart_df["time"] = chart_df["time"].dt.tz_localize(None)
     pivot = chart_df.pivot(index="time", columns="symbol", values="rank")
     return pivot.reset_index().melt('time', var_name='symbol', value_name='rank')
 
@@ -234,7 +237,7 @@ def render_history_rank():
 
             y=alt.Y(
                 'rank_scaled:Q',
-                scale=alt.Scale(domain=[1, 0], nice=False),
+                scale=alt.Scale(domain=[0, 1], reverse=True, nice=False),
                 axis=axis,
             ),
 
