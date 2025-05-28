@@ -51,3 +51,20 @@ def load_by_id(page: str, cache_id: str) -> Optional[pd.DataFrame]:
         except Exception:
             return None
     return None
+
+
+if __name__ == "__main__":
+    import argparse
+    import shutil
+
+    parser = argparse.ArgumentParser(description="Manage cached results")
+    parser.add_argument(
+        "--clear",
+        action="store_true",
+        help="Remove all cached result files",
+    )
+    args = parser.parse_args()
+
+    if args.clear:
+        shutil.rmtree(CACHE_DIR, ignore_errors=True)
+        print("Cache cleared.")

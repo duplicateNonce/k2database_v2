@@ -160,5 +160,7 @@ def render_bottom_lift_page():
         # 按 slope 降序排序
         df = df.sort_values("slope", ascending=False).reset_index(drop=True)
 
-        # 展示结果表格
-        st.dataframe(df, use_container_width=True)
+        # 展示结果表格，动态调整高度以显示所有行
+        row_height = 35  # approximate pixels per row
+        height = row_height * (len(df) + 1)
+        st.dataframe(df, use_container_width=True, height=height)
