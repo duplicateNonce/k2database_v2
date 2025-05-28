@@ -63,6 +63,10 @@ def _scale_rank(r: float, max_rank: int) -> float:
     or equal to 30 no compression is applied and the range is mapped linearly.
     """
 
+
+    if pd.isna(r):
+        return float('nan')
+
     if max_rank <= 30:
         if max_rank > 1:
             return (r - 1) / (max_rank - 1)
@@ -227,7 +231,13 @@ def render_history_rank():
         .mark_line(strokeWidth=1)
         .encode(
             x=alt.X('time:T', title='时间', axis=alt.Axis(format='%m/%d')),
-            y=alt.Y('rank_scaled:Q', scale=alt.Scale(domain=[0, 1], reverse=True), axis=axis),
+
+            y=alt.Y(
+                'rank_scaled:Q',
+                scale=alt.Scale(domain=[1, 0], nice=False),
+                axis=axis,
+            ),
+
             color='symbol:N'
         )
     )
