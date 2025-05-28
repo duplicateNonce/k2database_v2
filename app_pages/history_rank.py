@@ -165,12 +165,21 @@ def render_history_rank():
 
     mean, med = compute_stats(df_range)
     threshold = st.number_input(
-        "显示中位数>",
+        "显示中位数<=",
         min_value=0,
         value=st.session_state.get("rank_threshold", 10),
         key="rank_threshold",
     )
-    symbols = [s for s in med.index if med[s] > threshold]
+    symbols = [s for s in med.index if med[s] <= threshold]
+
+    selected_symbols = st.multiselect(
+        "选择展示的标的",
+        options=symbols,
+        default=st.session_state.get("rank_selected_symbols", symbols),
+        key="rank_selected_symbols",
+    )
+    if selected_symbols:
+        symbols = selected_symbols
     st.write("统计表")
     st.dataframe(pd.DataFrame({"mean": mean, "median": med}).loc[symbols].sort_values("median"))
     if not symbols:
