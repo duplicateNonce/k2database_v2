@@ -71,15 +71,6 @@ def x_search_summary(instrument_id: str, start: date, end: date, limit: int = 10
     return url, summary
 
 
-def bubble_market_summary(limit: int = 10) -> str:
-    """Fetch cryptobubbles data and return a summary via Grok."""
-    url = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    data = resp.text
-    # Pass raw JSON to Grok for summarization
-    return live_search_summary(data, limit=limit)
-
 if __name__ == "__main__":
     import sys, json
     if len(sys.argv) < 2:
