@@ -5,7 +5,10 @@ from datetime import date
 from urllib.parse import quote_plus
 
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-API_URL = "https://api.grok.x.ai/v1/search"  # Placeholder
+# Updated endpoint for Grok API
+API_URL = "https://api.x.ai/v1/chat/completions"
+DEFAULT_MODEL = "grok-3-latest"
+SYSTEM_PROMPT = "You are a search assistant."
 
 def live_search(query: str, limit: int = 5) -> dict:
     """Perform a live search using Grok's API.
@@ -24,7 +27,17 @@ def live_search(query: str, limit: int = 5) -> dict:
     if not GROK_API_KEY:
         raise RuntimeError("GROK_API_KEY not configured")
     headers = {"Authorization": f"Bearer {GROK_API_KEY}"}
-    payload = {"query": query, "limit": limit}
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": query},
+    ]
+    payload = {
+        "messages": messages,
+        "model": DEFAULT_MODEL,
+        "stream": False,
+        "temperature": 0,
+        "limit": limit,
+    }
     resp = requests.post(API_URL, json=payload, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()
