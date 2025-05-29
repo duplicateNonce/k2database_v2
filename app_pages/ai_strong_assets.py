@@ -7,7 +7,7 @@ from query_history import add_entry, get_history
 from utils import safe_rerun, short_time_range, update_shared_range, format_time_col
 from result_cache import load_cached, save_cached
 import pandas as pd
-from grok_search import live_search_summary, x_search_summary, bubble_market_summary
+from grok_search import live_search_summary, x_search_summary
 
 
 def render_ai_strong_assets_page():
@@ -224,11 +224,3 @@ def render_ai_strong_assets_page():
                         st.markdown(f"[在 X 上查看结果]({url})")
                         st.write(summary)
 
-            if st.button("市场整体描述", key="ai_sa_market"):
-                with st.spinner("搜索中..."):
-                    try:
-                        summary = bubble_market_summary()
-                    except Exception as exc:
-                        st.error(f"搜索失败: {exc}")
-                    else:
-                        st.write(summary)
