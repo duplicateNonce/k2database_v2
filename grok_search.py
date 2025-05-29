@@ -1,6 +1,8 @@
 import os
 import requests
 from googletrans import Translator
+from datetime import date
+from urllib.parse import quote_plus
 
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 API_URL = "https://api.grok.x.ai/v1/search"  # Placeholder
@@ -47,6 +49,36 @@ def live_search_summary(query: str, limit: int = 10) -> str:
     except Exception:
         # 如果翻译失败，直接返回英文摘要
         return summary_en
+
+
+def build_x_search_url(instrument_id: str, start: date, end: date) -> str:
+    """Return X advanced search URL for a coin instrument."""
+    if instrument_id.endswith("USDT"):
+        coin = instrument_id[:-4]
+    else:
+        coin = instrument_id
+    q = (
+        f"{coin} min_replies:5 min_faves:5 min_retweets:2 "
+        f"until:{end.isoformat()} since:{start.isoformat()}"
+    )
+    return "https://x.com/search?f=live&q=" + quote_plus(q) + "&src=typed_query"
+
+
+def x_search_summary(instrument_id: str, start: date, end: date, limit: int = 10) -> tuple[str, str]:
+    """Summarize X search results for the given instrument and period."""
+    url = build_x_search_url(instrument_id, start, end)
+    summary = live_search_summary(url, limit=limit)
+    return url, summary
+
+
+def bubble_market_summary(limit: int = 10) -> str:
+    """Fetch cryptobubbles data and return a summary via Grok."""
+    url = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    data = resp.text
+    # Pass raw JSON to Grok for summarization
+    return live_search_summary(data, limit=limit)
 
 if __name__ == "__main__":
     import sys, json
