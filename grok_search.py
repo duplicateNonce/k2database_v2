@@ -6,7 +6,10 @@ from urllib.parse import quote_plus
 
 
 # Obtain the API key for Grok (X.ai) from the environment or secrets
-from config import secret_get
+from config import secret_get, load_proxy_env, get_proxy_dict
+
+load_proxy_env()
+PROXIES = get_proxy_dict()
 
 # Earlier versions referenced ``GROK_API_KEY`` which doesn't match the
 # variable name used in configuration files (``XAI_API_KEY``).  Use the
@@ -45,7 +48,13 @@ def live_search(query: str, limit: int = 5) -> dict:
         "temperature": 0,
         "limit": limit,
     }
-    resp = requests.post(API_URL, json=payload, headers=headers, timeout=10)
+    resp = requests.post(
+        API_URL,
+        json=payload,
+        headers=headers,
+        timeout=10,
+        proxies=PROXIES or None,
+    )
     resp.raise_for_status()
     return resp.json()
 

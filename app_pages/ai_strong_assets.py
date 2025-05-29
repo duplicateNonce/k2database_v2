@@ -8,6 +8,10 @@ from utils import safe_rerun, short_time_range, update_shared_range, format_time
 from result_cache import load_cached, save_cached
 import pandas as pd
 from grok_search import live_search_summary, x_search_summary
+from config import load_proxy_env
+
+# Ensure proxy variables are loaded for network requests
+load_proxy_env()
 
 
 def render_ai_strong_assets_page():
