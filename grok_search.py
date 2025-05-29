@@ -4,7 +4,13 @@ from googletrans import Translator
 from datetime import date
 from urllib.parse import quote_plus
 
-GROK_API_KEY = os.getenv("GROK_API_KEY")
+# Obtain the API key for Grok (X.ai) from the environment or secrets
+from config import secret_get
+
+# Earlier versions referenced ``GROK_API_KEY`` which doesn't match the
+# variable name used in configuration files (``XAI_API_KEY``).  Use the
+# correct name to avoid confusion and failed lookups.
+XAI_API_KEY = secret_get("XAI_API_KEY")
 # Updated endpoint for Grok API
 API_URL = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-3-latest"
@@ -24,9 +30,9 @@ def live_search(query: str, limit: int = 5) -> dict:
     dict
         Parsed JSON response from the API.
     """
-    if not GROK_API_KEY:
-        raise RuntimeError("GROK_API_KEY not configured")
-    headers = {"Authorization": f"Bearer {GROK_API_KEY}"}
+    if not XAI_API_KEY:
+        raise RuntimeError("XAI_API_KEY not configured")
+    headers = {"Authorization": f"Bearer {XAI_API_KEY}"}
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": query},
