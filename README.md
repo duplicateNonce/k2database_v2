@@ -26,6 +26,16 @@ bob   = "pass2"
 
 Environment variables still take precedence if both are provided.
 
+## Requirements
+
+Install dependencies with `pip`:
+```bash
+pip install -r requirements.txt
+```
+
+The `pysocks` package is included to support SOCKS proxies.
+
+
 ## Database settings
 
 The app connects to PostgreSQL using the host, port, username and
