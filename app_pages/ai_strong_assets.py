@@ -13,8 +13,6 @@ from grok_search import live_search_summary, x_search_summary, bubble_market_sum
 def render_ai_strong_assets_page():
     st.header("AI-强势标的")
 
-    api_key = st.text_input("Grok API Key", type="password", key="ai_sa_api_key")
-
     # —— 历史记录侧边栏 ——
     user = st.session_state.get("username", "default")
     history = get_history("ai_strong_assets", user)
@@ -219,9 +217,7 @@ def render_ai_strong_assets_page():
                     s_date = st.session_state.get("ai_sa_start_date")
                     e_date = st.session_state.get("ai_sa_end_date")
                     try:
-                        url, summary = x_search_summary(
-                            symbol, s_date, e_date, api_key=api_key
-                        )
+                        url, summary = x_search_summary(symbol, s_date, e_date)
                     except Exception as exc:
                         st.error(f"搜索失败: {exc}")
                     else:
@@ -231,7 +227,7 @@ def render_ai_strong_assets_page():
             if st.button("市场整体描述", key="ai_sa_market"):
                 with st.spinner("搜索中..."):
                     try:
-                        summary = bubble_market_summary(api_key=api_key)
+                        summary = bubble_market_summary()
                     except Exception as exc:
                         st.error(f"搜索失败: {exc}")
                     else:

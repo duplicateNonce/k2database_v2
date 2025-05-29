@@ -86,9 +86,3 @@ previous ID, immediately invalidating the old session.
 
 For best security, deploy the app behind HTTPS so the browser does not
 flag the page as insecure.
-
-## Grok API key
-
-The "AI-强势标的" page requires access to Grok's search API. You can set the
-`GROK_API_KEY` environment variable, or simply enter your key in the page when
-prompted. The provided key will be used for the search requests.
