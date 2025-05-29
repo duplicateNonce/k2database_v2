@@ -57,4 +57,41 @@ else:
     # 兼容单用户模式
     u = secret_get("APP_USER")
     p = secret_get("APP_PASSWORD")
-    USER_CREDENTIALS = {u: p} if u and p else {}
+USER_CREDENTIALS = {u: p} if u and p else {}
+
+
+def load_proxy_env() -> None:
+    """Populate proxy related environment variables from configuration."""
+    keys = (
+        "ALL_PROXY",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "all_proxy",
+        "http_proxy",
+        "https_proxy",
+    )
+    for key in keys:
+        val = secret_get(key)
+        if val:
+            os.environ[key] = val
+
+
+def get_proxy_dict() -> dict:
+    """Return a requests ``proxies`` mapping derived from the environment."""
+    http = os.getenv("http_proxy") or os.getenv("HTTP_PROXY")
+    https = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY")
+    all_p = os.getenv("all_proxy") or os.getenv("ALL_PROXY")
+    proxies = {}
+    if all_p:
+        proxies["http"] = all_p
+        proxies["https"] = all_p
+    else:
+        if http:
+            proxies["http"] = http
+        if https:
+            proxies["https"] = https
+    return proxies
+
+
+# Load proxy env vars on import so other modules just need to import config
+load_proxy_env()
