@@ -47,8 +47,9 @@ TZ_NAME = "Asia/Shanghai"
 _multi = secret_get("APP_USERS")
 if not _multi and st and "app_users" in st.secrets:
     _multi = ",".join(f"{k}:{v}" for k, v in st.secrets["app_users"].items())
+
+USER_CREDENTIALS = {}
 if _multi:
-    USER_CREDENTIALS = {}
     for pair in _multi.split(","):
         pair = pair.strip()
         if ":" in pair:
@@ -58,7 +59,8 @@ else:
     # 兼容单用户模式
     u = secret_get("APP_USER")
     p = secret_get("APP_PASSWORD")
-USER_CREDENTIALS = {u: p} if u and p else {}
+    if u and p:
+        USER_CREDENTIALS[u] = p
 
 
 def load_proxy_env() -> None:
