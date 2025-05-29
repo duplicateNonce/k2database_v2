@@ -4,6 +4,7 @@ from googletrans import Translator
 from datetime import date
 from urllib.parse import quote_plus
 
+
 # Obtain the API key for Grok (X.ai) from the environment or secrets
 from config import secret_get
 
