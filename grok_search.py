@@ -4,7 +4,9 @@ from googletrans import Translator
 from datetime import date
 from urllib.parse import quote_plus
 
-GROK_API_KEY = os.getenv("GROK_API_KEY")
+from config import secret_get
+
+GROK_API_KEY = secret_get("GROK_API_KEY")
 # Updated endpoint for Grok API
 API_URL = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-3-latest"

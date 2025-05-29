@@ -10,12 +10,19 @@ load_dotenv()
 
 
 def secret_get(key: str, default: str = ""):
-    """Retrieve configuration from env vars or st.secrets."""
+    """Retrieve configuration from env vars or st.secrets.
+
+    Any value pulled from the environment will be expanded so that
+    references like ``${VAR}`` are resolved using existing variables.
+    """
     val = os.getenv(key)
     if val is not None and val != "":
-        return val
+        return os.path.expandvars(val)
     if st and key in st.secrets:
-        return st.secrets[key]
+        secret_val = st.secrets[key]
+        if isinstance(secret_val, str):
+            secret_val = os.path.expandvars(secret_val)
+        return secret_val
     return default
 
 # 通用环境配置
