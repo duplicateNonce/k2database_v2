@@ -203,10 +203,6 @@ def render_ai_strong_assets_page():
 
         # Cache result for later display outside this callback
         st.session_state["ai_sa_df"] = df
-        st.session_state["ai_sa_start_date"] = start_date
-        st.session_state["ai_sa_start_time"] = start_time
-        st.session_state["ai_sa_end_date"] = end_date
-        st.session_state["ai_sa_end_time"] = end_time
 
     df = st.session_state.get("ai_sa_df")
     if df is not None:
