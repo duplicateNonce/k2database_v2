@@ -6,7 +6,8 @@ try:
 except ModuleNotFoundError:
     st = None
 
-load_dotenv()
+# Load variables from .env, overriding existing environment
+load_dotenv(override=True)
 
 
 def secret_get(key: str, default: str = ""):
