@@ -7,7 +7,7 @@ from urllib.parse import quote_plus
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 API_URL = "https://api.grok.x.ai/v1/search"  # Placeholder
 
-def live_search(query: str, limit: int = 5) -> dict:
+def live_search(query: str, limit: int = 5, api_key: str | None = None) -> dict:
     """Perform a live search using Grok's API.
 
     Parameters
@@ -21,18 +21,20 @@ def live_search(query: str, limit: int = 5) -> dict:
     dict
         Parsed JSON response from the API.
     """
-    if not GROK_API_KEY:
+    if api_key is None:
+        api_key = GROK_API_KEY
+    if not api_key:
         raise RuntimeError("GROK_API_KEY not configured")
-    headers = {"Authorization": f"Bearer {GROK_API_KEY}"}
+    headers = {"Authorization": f"Bearer {api_key}"}
     payload = {"query": query, "limit": limit}
     resp = requests.post(API_URL, json=payload, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
 
-def live_search_summary(query: str, limit: int = 10) -> str:
+def live_search_summary(query: str, limit: int = 10, api_key: str | None = None) -> str:
     """Search Grok and return a Chinese summary of the results."""
-    data = live_search(query, limit=limit)
+    data = live_search(query, limit=limit, api_key=api_key)
     items = []
     for item in data.get("results", []):
         title = item.get("title", "")
@@ -64,21 +66,27 @@ def build_x_search_url(instrument_id: str, start: date, end: date) -> str:
     return "https://x.com/search?f=live&q=" + quote_plus(q) + "&src=typed_query"
 
 
-def x_search_summary(instrument_id: str, start: date, end: date, limit: int = 10) -> tuple[str, str]:
+def x_search_summary(
+    instrument_id: str,
+    start: date,
+    end: date,
+    limit: int = 10,
+    api_key: str | None = None,
+) -> tuple[str, str]:
     """Summarize X search results for the given instrument and period."""
     url = build_x_search_url(instrument_id, start, end)
-    summary = live_search_summary(url, limit=limit)
+    summary = live_search_summary(url, limit=limit, api_key=api_key)
     return url, summary
 
 
-def bubble_market_summary(limit: int = 10) -> str:
+def bubble_market_summary(limit: int = 10, api_key: str | None = None) -> str:
     """Fetch cryptobubbles data and return a summary via Grok."""
     url = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     data = resp.text
     # Pass raw JSON to Grok for summarization
-    return live_search_summary(data, limit=limit)
+    return live_search_summary(data, limit=limit, api_key=api_key)
 
 if __name__ == "__main__":
     import sys, json
