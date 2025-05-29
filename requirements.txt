@@ -9,3 +9,4 @@ streamlit-autorefresh>=0.1
 
 requests>=2.0
 numpy>=1.21
+googletrans==4.0.0-rc1
