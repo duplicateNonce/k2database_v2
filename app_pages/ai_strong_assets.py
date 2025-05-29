@@ -201,16 +201,47 @@ def render_ai_strong_assets_page():
             }
         )
 
-        # 展示结果表格
+        # Cache result for later display outside this callback
+        st.session_state["ai_sa_df"] = df
+        st.session_state["ai_sa_start_date"] = start_date
+        st.session_state["ai_sa_start_time"] = start_time
+        st.session_state["ai_sa_end_date"] = end_date
+        st.session_state["ai_sa_end_time"] = end_time
+
+    df = st.session_state.get("ai_sa_df")
+    if df is not None:
         st.dataframe(df, use_container_width=True)
 
         if not df.empty:
-            symbol = st.selectbox("选择代币查看归因", df["代币名字"])
+            symbol = st.selectbox(
+                "选择代币查看归因", df["代币名字"], key="ai_sa_symbol"
+            )
             if st.button("搜索涨幅归因", key="ai_sa_search"):
                 with st.spinner("搜索中..."):
+                    s_date = st.session_state.get("ai_sa_start_date")
+                    s_time = st.session_state.get("ai_sa_start_time")
+                    e_date = st.session_state.get("ai_sa_end_date")
+                    e_time = st.session_state.get("ai_sa_end_time")
                     prompt = (
-                        f"{symbol} 在 {start_date} {start_time} 到 {end_date} {end_time}"
+                        f"{symbol} 在 {s_date} {s_time} 到 {e_date} {e_time}"
                         " 涨幅原因 情绪 事件 治理 提案"
+                    )
+                    try:
+                        summary = live_search_summary(prompt)
+                    except Exception as exc:
+                        st.error(f"搜索失败: {exc}")
+                    else:
+                        st.write(summary)
+
+            if st.button("市场整体描述", key="ai_sa_market"):
+                with st.spinner("搜索中..."):
+                    s_date = st.session_state.get("ai_sa_start_date")
+                    s_time = st.session_state.get("ai_sa_start_time")
+                    e_date = st.session_state.get("ai_sa_end_date")
+                    e_time = st.session_state.get("ai_sa_end_time")
+                    prompt = (
+                        f"{s_date} {s_time} 到 {e_date} {e_time} 加密货币市场"
+                        " 行情 情绪 事件 治理 提案 概览"
                     )
                     try:
                         summary = live_search_summary(prompt)
