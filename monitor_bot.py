@@ -61,50 +61,27 @@ def _display_width(text: str) -> int:
     return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
 
 
-def format_fixed_width_table(rows: list[list], headers: list[str]) -> str:
-    """Return a Markdown table using fixed column widths.
+def ascii_table(df: pd.DataFrame) -> str:
+    """Return a plain text table with ASCII borders."""
+    headers = list(df.columns)
+    rows = df.astype(str).values.tolist()
+    widths = [max(_display_width(h), *(_display_width(r[i]) for r in rows)) for i, h in enumerate(headers)]
 
-    Text columns are left aligned while numeric columns are right aligned.
-    The table is wrapped in triple backticks for Telegram messages."""
+    def pad(val: str, width: int) -> str:
+        val = str(val)
+        pad_len = width - _display_width(val)
+        return val + " " * max(pad_len, 0)
 
-    str_rows = [[str(v) for v in row] for row in rows]
-    widths: list[int] = []
-    for i, h in enumerate(headers):
-        col_vals = [r[i] for r in str_rows]
-        w = max(_display_width(h), *(_display_width(v) for v in col_vals))
-        widths.append(w)
-
-    def is_numeric(vals: list[str]) -> bool:
-        for v in vals:
-            s = v[:-1] if v.endswith("%") else v
-            try:
-                float(s)
-            except ValueError:
-                return False
-        return True
-
-    align_right = [is_numeric([r[i] for r in str_rows]) for i in range(len(headers))]
-
-    def fmt(val: str, width: int, right: bool) -> str:
-        pad = width - _display_width(val)
-        if right:
-            return " " * max(pad, 0) + val
-        return val + " " * max(pad, 0)
-
-    lines: list[str] = []
-    header_line = " ".join(
-        fmt(h, widths[i], align_right[i]) for i, h in enumerate(headers)
-    )
-    sep_line = " ".join("─" * w for w in widths)
+    border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    lines = [border]
+    header_line = "| " + " | ".join(pad(h, w) for h, w in zip(headers, widths)) + " |"
     lines.append(header_line)
-    lines.append(sep_line)
-    for row in str_rows:
-        line = " ".join(
-            fmt(row[i], widths[i], align_right[i]) for i in range(len(headers))
-        )
+    lines.append(border)
+    for r in rows:
+        line = "| " + " | ".join(pad(val, w) for val, w in zip(r, widths)) + " |"
         lines.append(line)
-
-    return "```\n" + "\n".join(lines) + "\n```"
+    lines.append(border)
+    return "\n".join(lines)
 
 
 def check_prices() -> None:
@@ -164,6 +141,7 @@ def ba_command(chat_id: int) -> None:
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
+            # 按照与 P1 的差值百分比从大到小排序
             rows.sort(key=lambda x: x[3], reverse=True)
             top10 = rows[:10]
             table = pd.DataFrame(
@@ -177,7 +155,7 @@ def ba_command(chat_id: int) -> None:
                     for r in top10
                 ]
             )
-            msg = format_fixed_width_table(table.values.tolist(), list(table.columns))
+            msg = "```\n" + ascii_table(table) + "\n```"
             send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/ba 执行失败: {exc}", chat_id)
@@ -221,7 +199,9 @@ def rsi_command(chat_id: int) -> None:
         if data.get("code") != "0":
             raise RuntimeError(data.get("msg"))
         items = sorted(
-            data.get("data", []), key=lambda x: x.get("rsi_4h", 0), reverse=True
+            data.get("data", []),
+            key=lambda x: x.get("price_change_percent_4h", 0),
+            reverse=True,
         )[:10]
         table = []
         for it in items:
@@ -235,7 +215,7 @@ def rsi_command(chat_id: int) -> None:
                 }
             )
         df_t = pd.DataFrame(table, columns=["symbol", "RSI(4h)", "现价", "4h涨跌幅"])
-        msg = format_fixed_width_table(df_t.values.tolist(), list(df_t.columns))
+        msg = "```\n" + ascii_table(df_t) + "\n```"
         send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/rsi 执行失败: {exc}", chat_id)
