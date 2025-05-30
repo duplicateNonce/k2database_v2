@@ -23,7 +23,7 @@ FOUR_H_CACHE_DIR = Path("data/cache/4h")
 
 
 def ensure_table():
-    sql = """
+    sql1 = """
     CREATE TABLE IF NOT EXISTS monitor_levels (
         symbol TEXT PRIMARY KEY,
         start_ts BIGINT NOT NULL,
@@ -32,8 +32,14 @@ def ensure_table():
         alerted BOOLEAN NOT NULL DEFAULT FALSE
     );
     """
+    sql2 = """
+    CREATE TABLE IF NOT EXISTS ba_hidden (
+        symbol TEXT PRIMARY KEY
+    );
+    """
     with engine_ohlcv.begin() as conn:
-        conn.execute(text(sql))
+        conn.execute(text(sql1))
+        conn.execute(text(sql2))
 
 
 def send_message(text_msg: str, chat_id: str | int | None = None) -> None:
@@ -83,13 +89,15 @@ def ba_command(chat_id: int) -> None:
     try:
         with engine_ohlcv.begin() as conn:
             df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
+            hide = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
+            hidden = set(hide["symbol"].tolist()) if not hide.empty else set()
             if df.empty:
                 send_message("无 P1 数据", chat_id)
                 return
-            rows: list[tuple[str, float, float]] = []
+            rows: list[tuple[str, float, float, float, float]] = []
             for _, row in df.iterrows():
                 sym = row["symbol"]
-                if sym.upper() in IGNORED_SYMBOLS:
+                if sym.upper() in IGNORED_SYMBOLS or sym in hidden:
                     continue
                 p1 = float(row["p1"])
                 latest = conn.execute(
@@ -99,17 +107,55 @@ def ba_command(chat_id: int) -> None:
                 if not latest:
                     continue
                 p2 = float(latest[0])
-                diff_pct = abs(p2 - p1) / p1 * 100 if p1 else 0
-                rows.append((sym, p2, p1, diff_pct))
+                diff_abs = p2 - p1
+                diff_pct = abs(diff_abs) / p1 * 100 if p1 else 0
+                rows.append((sym, p2, p1, diff_abs, diff_pct))
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
-            rows.sort(key=lambda x: x[3])
+            rows.sort(key=lambda x: x[4])
             top5 = rows[:5]
-            lines = [f"{r[0]} {r[1]:.4f} 与 P1 {r[2]:.4f} 相差 {r[3]:.2f}%" for r in top5]
-            send_message("\n".join(lines), chat_id)
+            table = pd.DataFrame(
+                [
+                    {
+                        "Symbol": r[0].replace("USDT", ""),
+                        "现价": f"{r[1]:.4f}",
+                        "区域最高价": f"{r[2]:.4f}",
+                        "差值": f"{r[3]:+.4f}",
+                    }
+                    for r in top5
+                ]
+            )
+            msg = "```\n" + table.to_string(index=False) + "\n```"
+            send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/ba 执行失败: {exc}", chat_id)
+
+
+def removeba_command(chat_id: int, symbol: str) -> None:
+    symbol = symbol.upper()
+    try:
+        with engine_ohlcv.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ba_hidden(symbol) VALUES(:s) "
+                    "ON CONFLICT DO NOTHING"
+                ),
+                {"s": symbol},
+            )
+        send_message(f"已隐藏 {symbol}", chat_id)
+    except Exception as exc:
+        send_message(f"/removeba 执行失败: {exc}", chat_id)
+
+
+def addba_command(chat_id: int, symbol: str) -> None:
+    symbol = symbol.upper()
+    try:
+        with engine_ohlcv.begin() as conn:
+            conn.execute(text("DELETE FROM ba_hidden WHERE symbol=:s"), {"s": symbol})
+        send_message(f"已恢复 {symbol}", chat_id)
+    except Exception as exc:
+        send_message(f"/addba 执行失败: {exc}", chat_id)
 
 
 def rsi_command(chat_id: int) -> None:
@@ -124,8 +170,20 @@ def rsi_command(chat_id: int) -> None:
         if data.get("code") != "0":
             raise RuntimeError(data.get("msg"))
         items = sorted(data.get("data", []), key=lambda x: x.get("rsi_4h", 0))[:10]
-        lines = [f"{it['symbol']} {it['rsi_4h']:.2f} {it['current_price']}" for it in items]
-        send_message("\n".join(lines), chat_id)
+        table = []
+        for it in items:
+            pct = it.get("price_change_percent_4h", 0)
+            table.append(
+                {
+                    "symbol": it.get("symbol"),
+                    "RSI(4h)": f"{it.get('rsi_4h', 0):.2f}",
+                    "现价": it.get("current_price"),
+                    "4h涨跌幅": f"{pct:+.2f}%",
+                }
+            )
+        df_t = pd.DataFrame(table, columns=["symbol", "RSI(4h)", "现价", "4h涨跌幅"])
+        msg = "```\n" + df_t.to_string(index=False) + "\n```"
+        send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/rsi 执行失败: {exc}", chat_id)
 
@@ -301,7 +359,19 @@ def handle_update(upd: dict) -> int:
     msg = upd["message"]
     text_msg = msg.get("text", "")
     chat_id = msg.get("chat", {}).get("id")
-    if text_msg.startswith("/ba"):
+    if text_msg.startswith("/removeba"):
+        parts = text_msg.split()
+        if len(parts) >= 2:
+            removeba_command(chat_id, parts[1])
+        else:
+            send_message("用法: /removeba SYMBOL", chat_id)
+    elif text_msg.startswith("/addba"):
+        parts = text_msg.split()
+        if len(parts) >= 2:
+            addba_command(chat_id, parts[1])
+        else:
+            send_message("用法: /addba SYMBOL", chat_id)
+    elif text_msg.startswith("/ba"):
         ba_command(chat_id)
     elif text_msg.startswith("/rsi"):
         rsi_command(chat_id)
