@@ -98,3 +98,7 @@ def get_proxy_dict() -> dict:
 
 # Load proxy env vars on import so other modules just need to import config
 load_proxy_env()
+
+# Telegram configuration
+TELEGRAM_BOT_TOKEN = secret_get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = secret_get("TELEGRAM_CHAT_ID")

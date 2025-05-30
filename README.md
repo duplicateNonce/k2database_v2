@@ -74,6 +74,19 @@ If your database listens only on `127.0.0.1` you'll need to update
 `postgresql.conf` so it binds to a public interface and allows remote
 connections.
 
+## Telegram alerts
+
+Some scripts send notifications via a Telegram bot.  Provide the bot token
+and the target chat/group ID using environment variables:
+
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+```
+
+You can also define the same variables in `secrets.toml` when deploying to
+Streamlit Cloud.
+
 ## Streamlit notes
 
 This project runs on a minimal Streamlit build that does **not** support

@@ -1,93 +1,107 @@
 import streamlit as st
 import pandas as pd
-from datetime import timezone, timedelta
+from datetime import datetime, date, time, timedelta, timezone as dt_timezone
 from sqlalchemy import text
+
 from db import engine_ohlcv
 from config import TZ_NAME
-from strategies.strong_assets import compute_period_metrics
 
-# 缓存加载原始BTC 15m数据
-@st.cache_resource
-def load_btc_15m():
-    df = pd.read_sql(text(
-        "SELECT time, open, high, low, close, volume_usd "
-        "FROM ohlcv WHERE symbol='BTCUSDT'"
-    ), engine_ohlcv)
-    df['dt'] = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert(TZ_NAME)
+
+def ensure_table():
+    sql = """
+    CREATE TABLE IF NOT EXISTS monitor_levels (
+        symbol TEXT PRIMARY KEY,
+        start_ts BIGINT NOT NULL,
+        end_ts BIGINT NOT NULL,
+        p1 NUMERIC NOT NULL,
+        alerted BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    """
+    with engine_ohlcv.begin() as conn:
+        conn.execute(text(sql))
+
+
+def compute_p1(start_ts: int, end_ts: int) -> pd.DataFrame:
+    with engine_ohlcv.begin() as conn:
+        symbols = [
+            row[0] for row in conn.execute(text("SELECT instrument_id FROM instruments"))
+        ]
+        records = []
+        for sym in symbols:
+            row = conn.execute(
+                text(
+                    "SELECT close, time FROM ohlcv "
+                    "WHERE symbol=:s AND time BETWEEN :a AND :b "
+                    "ORDER BY close DESC LIMIT 1"
+                ),
+                {"s": sym, "a": start_ts, "b": end_ts},
+            ).fetchone()
+            if not row:
+                continue
+            p1 = float(row.close)
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO monitor_levels(symbol,start_ts,end_ts,p1,alerted)
+                    VALUES(:sym,:start,:end,:p1,false)
+                    ON CONFLICT(symbol) DO UPDATE
+                      SET start_ts=excluded.start_ts,
+                          end_ts=excluded.end_ts,
+                          p1=excluded.p1,
+                          alerted=false
+                    """
+                ),
+                {"sym": sym, "start": start_ts, "end": end_ts, "p1": p1},
+            )
+            records.append({"symbol": sym, "p1": p1, "time": row.time})
+    df = pd.DataFrame(records)
+    if not df.empty:
+        df["time"] = (
+            pd.to_datetime(df["time"], unit="ms", utc=True)
+            .dt.tz_convert(TZ_NAME)
+            .dt.strftime("%Y-%m-%d %H:%M")
+        )
     return df
-
-# 使用 pandas.resample 聚合严格完整的1小时K线
-def aggregate_hourly(df_raw: pd.DataFrame) -> pd.DataFrame:
-    df = df_raw.set_index('dt').sort_index()
-    counts = df['open'].resample('1H').count()
-    complete = counts[counts == 4].index
-    o = df['open'].resample('1H').first()
-    h = df['high'].resample('1H').max()
-    l = df['low'].resample('1H').min()
-    c = df['close'].resample('1H').last()
-    v = df['volume_usd'].resample('1H').sum()
-    res = pd.DataFrame({'open': o, 'high': h, 'low': l, 'close': c, 'volume_usd': v}).loc[complete]
-    res = res.reset_index()
-    res['hour_start'] = (res['dt'].astype('int64') // 10**6).astype(int)
-    return res[['hour_start', 'dt', 'open', 'high', 'low', 'close', 'volume_usd']]
 
 
 def render_monitor():
-    st.title("Monitor")
+    ensure_table()
+    st.header("Monitor")
 
-    # 1. 加载并聚合1h数据
-    btc15m = load_btc_15m()
-    hourly = aggregate_hourly(btc15m)
-    if hourly.empty:
-        st.info("暂无完整1小时K线可用")
-        return
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("开始日期", date.today() - timedelta(days=7))
+        start_time = st.time_input("开始时间", time(0, 0))
+    with col2:
+        end_date = st.date_input("结束日期", date.today())
+        end_time = st.time_input("结束时间", time(23, 59))
 
-    # 2. 找到最新上涨>=1%的1h bar
-    mask_up = (hourly['close'] > hourly['open']) & ((hourly['high'] / hourly['low'] - 1) >= 0.01)
-    up_bars = hourly[mask_up]
-    if up_bars.empty:
-        st.info("暂无上涨>=1%的1小时K线，监测工具暂不运行")
-        return
-    last_bar = up_bars.iloc[-1]
-    end_ms = int(last_bar['hour_start'] + 45 * 60 * 1000)
+    if st.button("计算并保存 P1"):
+        tz = dt_timezone(timedelta(hours=8))
+        start_dt = datetime.combine(start_date, start_time).replace(tzinfo=tz)
+        end_dt = datetime.combine(end_date, end_time).replace(tzinfo=tz)
+        start_ts = int(start_dt.timestamp() * 1000)
+        end_ts = int(end_dt.timestamp() * 1000)
+        df = compute_p1(start_ts, end_ts)
+        if df.empty:
+            st.warning("区间内无数据")
+        else:
+            st.dataframe(df)
 
-    # 3. 找到最近跌幅>=1%的1h bar（发生在 last_bar 之前）
-    mask_down = (hourly['close'] - hourly['open']) / hourly['open'] <= -0.01
-    down_bars = hourly[mask_down & (hourly['hour_start'] < last_bar['hour_start'])]
-    if down_bars.empty:
-        st.error("尚未检测到跌幅>=1%的1小时K线，无法进行区间分析")
-        return
-    start_bar = down_bars.iloc[-1]
-    start_ms = int(start_bar['hour_start'])
-
-    # 4. 显示区间起止
-    start_dt = start_bar['dt']
-    end_dt = last_bar['dt'] + timedelta(minutes=45)
-    st.markdown(
-        f"**区间起点：** {start_dt.strftime('%Y-%m-%d %H:%M')}  "
-        f"**区间终点：** {end_dt.strftime('%Y-%m-%d %H:%M')}"
+    st.subheader("已保存的 P1")
+    df_exist = pd.read_sql(
+        "SELECT symbol, p1, start_ts, end_ts, alerted FROM monitor_levels", engine_ohlcv
     )
+    if not df_exist.empty:
+        df_exist["start_ts"] = (
+            pd.to_datetime(df_exist["start_ts"], unit="ms", utc=True)
+            .dt.tz_convert(TZ_NAME)
+            .dt.strftime("%Y-%m-%d %H:%M")
+        )
+        df_exist["end_ts"] = (
+            pd.to_datetime(df_exist["end_ts"], unit="ms", utc=True)
+            .dt.tz_convert(TZ_NAME)
+            .dt.strftime("%Y-%m-%d %H:%M")
+        )
+    st.dataframe(df_exist)
 
-    # 5. 核对1h聚合结果
-    period = hourly[(hourly['hour_start'] >= start_ms) & (hourly['hour_start'] <= last_bar['hour_start'])]
-    st.subheader("1小时聚合K线(供核对)")
-    st.dataframe(period[['dt', 'open', 'high', 'low', 'close', 'volume_usd']])
-
-    # 6. 计算全标的及标签强势排序
-    inst = pd.read_sql(text("SELECT symbol, labels FROM instruments"), engine_ohlcv)
-    df_all = pd.read_sql(text(
-        "SELECT symbol, low, close FROM ohlcv "
-        "WHERE time BETWEEN :start AND :end"
-    ), engine_ohlcv, params={"start": int(start_ms), "end": int(end_ms)})
-    records = []
-    for sym, grp in df_all.groupby('symbol'):
-        low_price = grp['low'].min()
-        last_price = grp.iloc[-1]['close']
-        reb = (last_price / low_price - 1) * 100
-        labels = inst.loc[inst['symbol'] == sym, 'labels'].iloc[0] if sym in inst['symbol'].values else ''
-        records.append({'symbol': sym, 'labels': labels, '反弹幅度(%)': reb})
-    df_reb = pd.DataFrame(records).sort_values('反弹幅度(%)', ascending=False)
-    st.subheader("全标的及标签强势排序")
-    st.dataframe(df_reb)
-
-# 在 streamlit_app.py 注册 render_monitor()
