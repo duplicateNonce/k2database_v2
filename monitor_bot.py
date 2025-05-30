@@ -5,8 +5,21 @@ import requests
 from sqlalchemy import text
 from datetime import datetime, timezone
 
+from pathlib import Path
+
 from db import engine_ohlcv
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, get_proxy_dict
+from config import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    CG_API_KEY,
+    get_proxy_dict,
+)
+
+# Symbols that should be skipped when checking alerts
+IGNORED_SYMBOLS = {"USDCUSDT"}
+
+# Directory used to store aggregated 4h candles
+FOUR_H_CACHE_DIR = Path("data/cache/4h")
 
 
 def ensure_table():
@@ -45,6 +58,8 @@ def check_prices() -> None:
         alerts = []
         for _, row in df.iterrows():
             sym = row["symbol"]
+            if sym.upper() in IGNORED_SYMBOLS:
+                continue
             p1 = float(row["p1"])
             latest = conn.execute(
                 text("SELECT close FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
@@ -74,6 +89,8 @@ def ba_command(chat_id: int) -> None:
             rows: list[tuple[str, float, float]] = []
             for _, row in df.iterrows():
                 sym = row["symbol"]
+                if sym.upper() in IGNORED_SYMBOLS:
+                    continue
                 p1 = float(row["p1"])
                 latest = conn.execute(
                     text("SELECT close FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
@@ -99,7 +116,10 @@ def rsi_command(chat_id: int) -> None:
     """Return the 10 symbols with the lowest 4h RSI."""
     url = "https://open-api-v4.coinglass.com/api/futures/rsi/list"
     try:
-        resp = requests.get(url, headers={"accept": "application/json"}, timeout=10, proxies=get_proxy_dict())
+        headers = {"accept": "application/json"}
+        if CG_API_KEY:
+            headers["CG-API-KEY"] = CG_API_KEY
+        resp = requests.get(url, headers=headers, timeout=10, proxies=get_proxy_dict())
         data = resp.json()
         if data.get("code") != "0":
             raise RuntimeError(data.get("msg"))
@@ -110,7 +130,7 @@ def rsi_command(chat_id: int) -> None:
         send_message(f"/rsi 执行失败: {exc}", chat_id)
 
 
-UP_STREAK = 4  # 连涨阈值
+UP_STREAK = 2  # 连涨阈值
 
 
 def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
@@ -126,6 +146,37 @@ def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
     v = df["volume_usd"].resample("4H").sum().loc[complete]
     res = pd.DataFrame({"open": o, "high": h, "low": l, "close": c, "volume": v})
     return res.reset_index().rename(columns={"dt": "start"})
+
+
+def load_4h_data(conn, symbol: str) -> pd.DataFrame:
+    """Return cached 4h candles, updating from the database if needed."""
+    FOUR_H_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = FOUR_H_CACHE_DIR / f"{symbol}.csv"
+    df_cache = pd.DataFrame()
+    next_ts = 0
+    if path.exists():
+        try:
+            df_cache = pd.read_csv(path, parse_dates=["start"])
+            if not df_cache.empty:
+                last_start = df_cache["start"].iloc[-1]
+                next_ts = int(pd.Timestamp(last_start).timestamp() * 1000) + 4 * 3600 * 1000
+        except Exception:
+            df_cache = pd.DataFrame()
+    df = pd.read_sql(
+        text(
+            "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
+            "WHERE symbol=:s AND time >= :t ORDER BY time"
+        ),
+        conn,
+        params={"s": symbol, "t": next_ts},
+    )
+    if not df.empty:
+        df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True)
+        new_4h = aggregate_4h(df)
+        if not new_4h.empty:
+            df_cache = pd.concat([df_cache, new_4h], ignore_index=True)
+            df_cache.to_csv(path, index=False)
+    return df_cache
 
 
 def consecutive_up_count(df4h: pd.DataFrame) -> int:
@@ -162,18 +213,9 @@ def check_up_alert() -> None:
         if not syms:
             return
         for sym in syms:
-            df = pd.read_sql(
-                text(
-                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
-                    "WHERE symbol=:s ORDER BY time DESC LIMIT 200"
-                ),
-                conn,
-                params={"s": sym},
-            )
-            if df.empty:
+            if sym.upper() in IGNORED_SYMBOLS:
                 continue
-            df["dt"] = pd.to_datetime(df["time"], unit="ms", utc=True)
-            df4h = aggregate_4h(df)
+            df4h = load_4h_data(conn, sym)
             if df4h.empty:
                 continue
             streak = consecutive_up_count(df4h)
@@ -213,6 +255,29 @@ def history_command(chat_id: int) -> None:
     send_message("\n".join(lines), chat_id)
 
 
+def four_hour_command(chat_id: int) -> None:
+    """Aggregate all OHLCV data into 4h candles and send alerts."""
+    with engine_ohlcv.begin() as conn:
+        syms = [row[0] for row in conn.execute(text("SELECT symbol FROM monitor_levels"))]
+        if not syms:
+            send_message("无监控币种", chat_id)
+            return
+        lines: list[str] = []
+        for sym in syms:
+            if sym.upper() in IGNORED_SYMBOLS:
+                continue
+            df4h = load_4h_data(conn, sym)
+            if df4h.empty:
+                continue
+            streak = consecutive_up_count(df4h)
+            if streak >= UP_STREAK:
+                lines.append(f"{sym} 4h 连涨 {streak} 根")
+        if lines:
+            send_message("\n".join(lines), chat_id)
+        else:
+            send_message("无符合条件的交易对", chat_id)
+
+
 def fetch_updates(offset: int) -> list[dict]:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     try:
@@ -241,7 +306,7 @@ def handle_update(upd: dict) -> int:
     elif text_msg.startswith("/rsi"):
         rsi_command(chat_id)
     elif text_msg.startswith("/4h"):
-        history_command(chat_id)
+        four_hour_command(chat_id)
     return upd.get("update_id", 0)
 
 

@@ -109,3 +109,17 @@ previous ID, immediately invalidating the old session.
 
 For best security, deploy the app behind HTTPS so the browser does not
 flag the page as insecure.
+
+### 4h aggregation
+
+The monitoring bot combines 15 minute candles into 4 hour bars. Sixteen
+consecutive 15 minute records (00, 15, 30 and 45 minutes past the hour)
+are required for a valid bar. The aggregated candle uses the first
+record's open, the highest high and lowest low of the group, the last
+record's close and the sum of all volumes. Partial periods (for example if
+data ends on the 30 minute mark) are discarded. Aggregation starts from
+00:00 so the final bar of a day is 20:00–24:00.
+
+Aggregated 4h candles are cached under `data/cache/4h` as CSV files to
+avoid recomputing from raw 15 minute data. Each query updates the cache
+with any new records.
