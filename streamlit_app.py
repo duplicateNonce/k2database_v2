@@ -9,6 +9,7 @@ from app_pages.combined_analysis import render_combined_page
 from app_pages.watchlist import render_watchlist_page
 from app_pages.history_rank import render_history_rank
 from app_pages.monitor import render_monitor
+from app_pages.long_short_analysis import render_long_short_analysis_page
 
 from login import require_login, logout
 from utils import safe_rerun
@@ -23,6 +24,7 @@ PAGES = {
     # "标签化涨跌幅": render_price_change_by_label,
     "自选标的": render_watchlist_page,
     "Monitor": render_monitor,
+    "多空持仓分析": render_long_short_analysis_page,
 }
 # 动态添加
 PAGES["编辑标的标签"] = render_label_assets_page
