@@ -248,13 +248,9 @@ def handle_update(upd: dict) -> int:
 def main() -> None:
     ensure_table()
     ensure_up_tables()
-    send_message("监控机器人已启动")
+    send_message("monitor bot started")
     last_update = 0
-    last_check = time.time()
     while True:
-        if time.time() - last_check >= 900:
-            check_prices()
-            last_check = time.time()
         updates = fetch_updates(last_update + 1)
         for upd in updates:
             last_update = handle_update(upd)
