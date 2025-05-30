@@ -122,4 +122,5 @@ data ends on the 30 minute mark) are discarded. Aggregation starts from
 
 Aggregated 4h candles are cached under `data/cache/4h` as CSV files to
 avoid recomputing from raw 15 minute data. Each query updates the cache
-with any new records.
+with any new records and the bot keeps aggregated results in memory to
+speed up repeated checks.
