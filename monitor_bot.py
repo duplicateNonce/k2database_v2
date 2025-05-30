@@ -21,6 +21,7 @@ IGNORED_SYMBOLS = {"USDCUSDT"}
 
 # Directory used to store aggregated 4h candles
 FOUR_H_CACHE_DIR = Path("data/cache/4h")
+FOUR_H_MEM_CACHE: dict[str, pd.DataFrame] = {}
 
 
 def ensure_table():
@@ -225,16 +226,29 @@ UP_STREAK = 2  # 连涨阈值
 
 
 def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate 15m candles into 4h bars aligned to 00:00/04:00/08:00..."""
     df = df.set_index("dt").sort_index()
-    counts = df["open"].resample("4H").count()
+    # Snap timestamps to 15m boundaries to avoid drift
+    df.index = df.index.floor("15min")
+    # Resample using a fixed origin so windows start at 00:00, 04:00, ...
+    rs = df.resample(
+        "4H",
+        label="left",
+        closed="left",
+        origin="epoch",
+        offset="0H",
+    )
+
+    counts = rs["open"].count()
     complete = counts[counts == 16].index
     if complete.empty:
         return pd.DataFrame()
-    o = df["open"].resample("4H").first().loc[complete]
-    h = df["high"].resample("4H").max().loc[complete]
-    l = df["low"].resample("4H").min().loc[complete]
-    c = df["close"].resample("4H").last().loc[complete]
-    v = df["volume_usd"].resample("4H").sum().loc[complete]
+
+    o = rs["open"].first().loc[complete]
+    h = rs["high"].max().loc[complete]
+    l = rs["low"].min().loc[complete]
+    c = rs["close"].last().loc[complete]
+    v = rs["volume_usd"].sum().loc[complete]
     res = pd.DataFrame({"open": o, "high": h, "low": l, "close": c, "volume": v})
     return res.reset_index().rename(columns={"dt": "start"})
 
@@ -243,16 +257,18 @@ def load_4h_data(conn, symbol: str) -> pd.DataFrame:
     """Return cached 4h candles, updating from the database if needed."""
     FOUR_H_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = FOUR_H_CACHE_DIR / f"{symbol}.csv"
-    df_cache = pd.DataFrame()
+    df_cache = FOUR_H_MEM_CACHE.get(symbol)
     next_ts = 0
-    if path.exists():
+    if df_cache is None and path.exists():
         try:
             df_cache = pd.read_csv(path, parse_dates=["start"])
-            if not df_cache.empty:
-                last_start = df_cache["start"].iloc[-1]
-                next_ts = int(pd.Timestamp(last_start).timestamp() * 1000) + 4 * 3600 * 1000
         except Exception:
             df_cache = pd.DataFrame()
+    if df_cache is not None and not df_cache.empty:
+        last_start = df_cache["start"].iloc[-1]
+        next_ts = int(pd.Timestamp(last_start).timestamp() * 1000) + 4 * 3600 * 1000
+    else:
+        df_cache = pd.DataFrame()
     df = pd.read_sql(
         text(
             "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
@@ -267,6 +283,7 @@ def load_4h_data(conn, symbol: str) -> pd.DataFrame:
         if not new_4h.empty:
             df_cache = pd.concat([df_cache, new_4h], ignore_index=True)
             df_cache.to_csv(path, index=False)
+    FOUR_H_MEM_CACHE[symbol] = df_cache
     return df_cache
 
 
