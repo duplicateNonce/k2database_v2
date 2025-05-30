@@ -32,16 +32,27 @@ def save_watchlist(lst: list[str]) -> None:
 
 
 def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate 15m candles into 4h bars starting from local midnight."""
     df = df.set_index("dt").sort_index()
-    counts = df["open"].resample("4H").count()
+    df.index = df.index.floor("15min")
+    origin = pd.Timestamp("1970-01-01", tz=df.index.tz)
+    rs = df.resample(
+        "4H",
+        label="left",
+        closed="left",
+        origin=origin,
+    )
+
+    counts = rs["open"].count()
     complete = counts[counts == 16].index
     if complete.empty:
         return pd.DataFrame()
-    o = df["open"].resample("4H").first().loc[complete]
-    h = df["high"].resample("4H").max().loc[complete]
-    l = df["low"].resample("4H").min().loc[complete]
-    c = df["close"].resample("4H").last().loc[complete]
-    v = df["volume_usd"].resample("4H").sum().loc[complete]
+
+    o = rs["open"].first().loc[complete]
+    h = rs["high"].max().loc[complete]
+    l = rs["low"].min().loc[complete]
+    c = rs["close"].last().loc[complete]
+    v = rs["volume_usd"].sum().loc[complete]
     res = pd.DataFrame({"open": o, "high": h, "low": l, "close": c, "volume": v})
     res = res.reset_index().rename(columns={"dt": "start"})
     return res
