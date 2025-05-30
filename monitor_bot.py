@@ -119,14 +119,15 @@ def ba_command(chat_id: int) -> None:
         with engine_ohlcv.begin() as conn:
             df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
             hide = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
-            hidden = set(hide["symbol"].tolist()) if not hide.empty else set()
+            hidden = set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
             if df.empty:
                 send_message("无 P1 数据", chat_id)
                 return
             rows: list[tuple[str, float, float, float, float]] = []
             for _, row in df.iterrows():
                 sym = row["symbol"]
-                if sym.upper() in IGNORED_SYMBOLS or sym in hidden:
+                u_sym = sym.upper()
+                if u_sym in IGNORED_SYMBOLS or u_sym in hidden:
                     continue
                 p1 = float(row["p1"])
                 latest = conn.execute(
@@ -188,7 +189,7 @@ def addba_command(chat_id: int, symbol: str) -> None:
 
 
 def rsi_command(chat_id: int) -> None:
-    """Return the 10 symbols with the highest 4h RSI."""
+    """Return the 10 symbols with the lowest 4h RSI."""
     url = "https://open-api-v4.coinglass.com/api/futures/rsi/list"
     try:
         headers = {"accept": "application/json"}
@@ -200,8 +201,7 @@ def rsi_command(chat_id: int) -> None:
             raise RuntimeError(data.get("msg"))
         items = sorted(
             data.get("data", []),
-            key=lambda x: x.get("price_change_percent_4h", 0),
-            reverse=True,
+            key=lambda x: x.get("rsi_4h", 0),
         )[:10]
         table = []
         for it in items:
