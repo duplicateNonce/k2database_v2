@@ -256,5 +256,6 @@ def main() -> None:
             last_update = handle_update(upd)
         time.sleep(5)
 
+
 if __name__ == "__main__":
     main()
