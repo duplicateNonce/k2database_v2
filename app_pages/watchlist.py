@@ -32,20 +32,20 @@ def save_watchlist(lst: list[str]) -> None:
 
 
 def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
-
-    """Aggregate 15m candles into 4h bars starting from local midnight."""
+    """Aggregate 15m candles into 4h bars aligned to 00:00/04:00/08:00..."""
     df = df.set_index("dt").sort_index()
     df.index = df.index.floor("15min")
-    origin = pd.Timestamp("1970-01-01", tz=df.index.tz)
-
+    tz = df.index.tz
+    if tz is not None:
+        origin = pd.Timestamp("1970-01-01", tz=tz)
+    else:
+        origin = "epoch"
     rs = df.resample(
         "4H",
         label="left",
         closed="left",
         origin=origin,
-
         offset="0H",
-
     )
 
     counts = rs["open"].count()
