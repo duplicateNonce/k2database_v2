@@ -226,22 +226,18 @@ UP_STREAK = 2  # 连涨阈值
 
 
 def aggregate_4h(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate 15m candles into 4h bars aligned to 00:00/04:00/08:00..."""
+
+    """Aggregate 15m candles into 4h bars starting from local midnight."""
     df = df.set_index("dt").sort_index()
-    # Snap timestamps to 15m boundaries to avoid drift
     df.index = df.index.floor("15min")
-    # Resample using a fixed origin so windows start at 00:00, 04:00, ...
-    tz = df.index.tz
-    if tz is not None:
-        origin = pd.Timestamp("1970-01-01", tz=tz)
-    else:
-        origin = "epoch"
+    origin = pd.Timestamp("1970-01-01", tz=df.index.tz)
+
     rs = df.resample(
         "4H",
         label="left",
         closed="left",
         origin=origin,
-        offset="0H",
+
     )
 
     counts = rs["open"].count()
