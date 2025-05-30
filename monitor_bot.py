@@ -125,13 +125,12 @@ def ba_command(chat_id: int) -> None:
                 if not latest:
                     continue
                 p2 = float(latest[0])
-                diff_abs = p2 - p1
-                diff_pct = abs(diff_abs) / p1 * 100 if p1 else 0
-                rows.append((sym, p2, p1, diff_abs, diff_pct))
+                diff_pct = (p2 - p1) / p1 * 100 if p1 else 0.0
+                rows.append((sym, p2, p1, diff_pct))
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
-            rows.sort(key=lambda x: x[4], reverse=True)
+            rows.sort(key=lambda x: x[3])
             top10 = rows[:10]
             table = pd.DataFrame(
                 [
@@ -139,7 +138,7 @@ def ba_command(chat_id: int) -> None:
                         "Symbol": r[0].replace("USDT", ""),
                         "现价": f"{r[1]:.4f}",
                         "区域最高价": f"{r[2]:.4f}",
-                        "差值": f"{r[3]:+.4f}",
+                        "差值": f"{r[3]:+.2f}%",
                     }
                     for r in top10
                 ]
