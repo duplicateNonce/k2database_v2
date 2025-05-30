@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 from sqlalchemy import text
 from datetime import datetime, timezone
+import unicodedata
 
 from pathlib import Path
 
@@ -55,19 +56,29 @@ def send_message(text_msg: str, chat_id: str | int | None = None) -> None:
         print("Failed to send telegram message:", e)
 
 
+def _display_width(text: str) -> int:
+    """Return the visual width of a string accounting for wide chars."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+
 def ascii_table(df: pd.DataFrame) -> str:
     """Return a plain text table with ASCII borders."""
     headers = list(df.columns)
     rows = df.astype(str).values.tolist()
-    widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
+    widths = [max(_display_width(h), *(_display_width(r[i]) for r in rows)) for i, h in enumerate(headers)]
+
+    def pad(val: str, width: int) -> str:
+        val = str(val)
+        pad_len = width - _display_width(val)
+        return val + " " * max(pad_len, 0)
 
     border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
     lines = [border]
-    header_line = "| " + " | ".join(f"{h:{w}}" for h, w in zip(headers, widths)) + " |"
+    header_line = "| " + " | ".join(pad(h, w) for h, w in zip(headers, widths)) + " |"
     lines.append(header_line)
     lines.append(border)
     for r in rows:
-        line = "| " + " | ".join(f"{val:{w}}" for val, w in zip(r, widths)) + " |"
+        line = "| " + " | ".join(pad(val, w) for val, w in zip(r, widths)) + " |"
         lines.append(line)
     lines.append(border)
     return "\n".join(lines)
@@ -125,13 +136,12 @@ def ba_command(chat_id: int) -> None:
                 if not latest:
                     continue
                 p2 = float(latest[0])
-                diff_abs = p2 - p1
-                diff_pct = abs(diff_abs) / p1 * 100 if p1 else 0
-                rows.append((sym, p2, p1, diff_abs, diff_pct))
+                diff_pct = (p2 - p1) / p1 * 100 if p1 else 0.0
+                rows.append((sym, p2, p1, diff_pct))
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
-            rows.sort(key=lambda x: x[4], reverse=True)
+            rows.sort(key=lambda x: x[3])
             top10 = rows[:10]
             table = pd.DataFrame(
                 [
@@ -139,7 +149,7 @@ def ba_command(chat_id: int) -> None:
                         "Symbol": r[0].replace("USDT", ""),
                         "现价": f"{r[1]:.4f}",
                         "区域最高价": f"{r[2]:.4f}",
-                        "差值": f"{r[3]:+.4f}",
+                        "差值": f"{r[3]:+.2f}%",
                     }
                     for r in top10
                 ]
