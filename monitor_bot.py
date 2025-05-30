@@ -55,6 +55,24 @@ def send_message(text_msg: str, chat_id: str | int | None = None) -> None:
         print("Failed to send telegram message:", e)
 
 
+def ascii_table(df: pd.DataFrame) -> str:
+    """Return a plain text table with ASCII borders."""
+    headers = list(df.columns)
+    rows = df.astype(str).values.tolist()
+    widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
+
+    border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    lines = [border]
+    header_line = "| " + " | ".join(f"{h:{w}}" for h, w in zip(headers, widths)) + " |"
+    lines.append(header_line)
+    lines.append(border)
+    for r in rows:
+        line = "| " + " | ".join(f"{val:{w}}" for val, w in zip(r, widths)) + " |"
+        lines.append(line)
+    lines.append(border)
+    return "\n".join(lines)
+
+
 def check_prices() -> None:
     """Alert when the latest price is higher than the saved P1."""
     with engine_ohlcv.begin() as conn:
@@ -85,7 +103,7 @@ def check_prices() -> None:
 
 
 def ba_command(chat_id: int) -> None:
-    """Respond to /ba with top 5 symbols closest to P1."""
+    """Respond to /ba with the 10 symbols most distant from P1."""
     try:
         with engine_ohlcv.begin() as conn:
             df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
@@ -113,8 +131,8 @@ def ba_command(chat_id: int) -> None:
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
-            rows.sort(key=lambda x: x[4])
-            top5 = rows[:5]
+            rows.sort(key=lambda x: x[4], reverse=True)
+            top10 = rows[:10]
             table = pd.DataFrame(
                 [
                     {
@@ -123,10 +141,10 @@ def ba_command(chat_id: int) -> None:
                         "区域最高价": f"{r[2]:.4f}",
                         "差值": f"{r[3]:+.4f}",
                     }
-                    for r in top5
+                    for r in top10
                 ]
             )
-            msg = "```\n" + table.to_string(index=False) + "\n```"
+            msg = "```\n" + ascii_table(table) + "\n```"
             send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/ba 执行失败: {exc}", chat_id)
@@ -159,7 +177,7 @@ def addba_command(chat_id: int, symbol: str) -> None:
 
 
 def rsi_command(chat_id: int) -> None:
-    """Return the 10 symbols with the lowest 4h RSI."""
+    """Return the 10 symbols with the highest 4h RSI."""
     url = "https://open-api-v4.coinglass.com/api/futures/rsi/list"
     try:
         headers = {"accept": "application/json"}
@@ -169,7 +187,9 @@ def rsi_command(chat_id: int) -> None:
         data = resp.json()
         if data.get("code") != "0":
             raise RuntimeError(data.get("msg"))
-        items = sorted(data.get("data", []), key=lambda x: x.get("rsi_4h", 0))[:10]
+        items = sorted(
+            data.get("data", []), key=lambda x: x.get("rsi_4h", 0), reverse=True
+        )[:10]
         table = []
         for it in items:
             pct = it.get("price_change_percent_4h", 0)
@@ -182,7 +202,7 @@ def rsi_command(chat_id: int) -> None:
                 }
             )
         df_t = pd.DataFrame(table, columns=["symbol", "RSI(4h)", "现价", "4h涨跌幅"])
-        msg = "```\n" + df_t.to_string(index=False) + "\n```"
+        msg = "```\n" + ascii_table(df_t) + "\n```"
         send_message(msg, chat_id)
     except Exception as exc:
         send_message(f"/rsi 执行失败: {exc}", chat_id)
