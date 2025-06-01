@@ -307,6 +307,37 @@ def consecutive_up_count(df4h: pd.DataFrame) -> int:
     return count
 
 
+def load_4h_data_db(conn, symbol: str) -> pd.DataFrame:
+    """Load 4h candles from the ohlcv_4h table."""
+    return pd.read_sql(
+        text(
+            "SELECT time, close FROM ohlcv_4h WHERE symbol=:s ORDER BY time"
+        ),
+        conn,
+        params={"s": symbol},
+    )
+
+
+def consecutive_up_info(df4h: pd.DataFrame) -> tuple[int, float]:
+    """Return consecutive up count and percentage change based on close."""
+    if df4h.empty or len(df4h) < 2:
+        return 0, 0.0
+    df4h = df4h.sort_values("time").reset_index(drop=True)
+    closes = df4h["close"].astype(float).tolist()
+    count = 0
+    for i in range(len(closes) - 1, 0, -1):
+        if closes[i] > closes[i - 1]:
+            count += 1
+        else:
+            break
+    if count == 0:
+        return 0, 0.0
+    start_close = closes[len(closes) - count - 1]
+    end_close = closes[-1]
+    pct = (end_close - start_close) / start_close * 100 if start_close else 0.0
+    return count, pct
+
+
 def ensure_up_tables() -> None:
     sql = """
     CREATE TABLE IF NOT EXISTS four_hour_up_history (
@@ -369,26 +400,34 @@ def history_command(chat_id: int) -> None:
 
 
 def four_hour_command(chat_id: int) -> None:
-    """Aggregate all OHLCV data into 4h candles and send alerts."""
+    """Rank monitored symbols by consecutive up 4h candles."""
     with engine_ohlcv.begin() as conn:
         syms = [row[0] for row in conn.execute(text("SELECT symbol FROM monitor_levels"))]
         if not syms:
             send_message("无监控币种", chat_id)
             return
-        lines: list[str] = []
+        rows: list[tuple[str, int, float]] = []
         for sym in syms:
             if sym.upper() in IGNORED_SYMBOLS:
                 continue
-            df4h = load_4h_data(conn, sym)
-            if df4h.empty:
-                continue
-            streak = consecutive_up_count(df4h)
-            if streak >= UP_STREAK:
-                lines.append(f"{sym} 4h 连涨 {streak} 根")
-        if lines:
-            send_message("\n".join(lines), chat_id)
-        else:
+            df4h = load_4h_data_db(conn, sym)
+            count, pct = consecutive_up_info(df4h)
+            if count > 0:
+                rows.append((sym, count, pct))
+        if not rows:
             send_message("无符合条件的交易对", chat_id)
+            return
+        rows.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        top10 = rows[:10]
+        table = pd.DataFrame(
+            [
+                {"symbol": r[0], "连涨次数": r[1], "累计涨幅": f"{r[2]:+.2f}%"}
+                for r in top10
+            ],
+            columns=["symbol", "连涨次数", "累计涨幅"],
+        )
+        msg = "```\n" + ascii_table(table) + "\n```"
+        send_message(msg, chat_id)
 
 
 def fetch_updates(offset: int) -> list[dict]:
