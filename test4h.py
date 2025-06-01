@@ -22,12 +22,14 @@ def get_symbols():
     return symbols
 
 
+
 def fetch_closes(symbol: str, limit: int = 100):
     conn = psycopg2.connect(**DB_CFG)
     cur = conn.cursor()
     cur.execute(
         "SELECT close FROM ohlcv_4h WHERE symbol=%s ORDER BY time DESC LIMIT %s",
         (symbol, limit),
+
     )
     closes = [float(r[0]) for r in cur.fetchall()]
     cur.close()
