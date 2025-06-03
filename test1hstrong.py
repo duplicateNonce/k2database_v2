@@ -28,6 +28,27 @@ DB_CFG = {
 }
 
 
+def get_labels_map() -> Dict[str, list]:
+    """Return a mapping of symbol -> labels list."""
+    conn = psycopg2.connect(**DB_CFG)
+    cur = conn.cursor()
+    cur.execute("SELECT instrument_id, labels FROM instruments")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    labels = {}
+    for sym, lbl in rows:
+        if isinstance(lbl, list):
+            labels[sym] = lbl
+        elif lbl is None:
+            labels[sym] = []
+        else:
+            # ensure string -> [string]
+            labels[sym] = [str(lbl)]
+    return labels
+
+
 def get_latest_ts() -> int:
     """Return latest ``time`` value from ``ohlcv_1h``."""
     conn = psycopg2.connect(**DB_CFG)
@@ -73,22 +94,31 @@ def hourly_rank(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate ranking statistics for each symbol."""
+    """Aggregate ranking statistics for each symbol.
+
+    ``avg_rank`` and ``median_rank`` include hours where the symbol did
+    not enter the top list (counted as rank ``max_rank + 1``).
+    """
+
     if ranks.empty:
         return pd.DataFrame(columns=["symbol", "times", "avg_rank", "median_rank"])
-    grp = ranks.groupby("symbol")["rank"].agg(list)
-    stats_records = []
-    for sym, rank_list in grp.items():
-        count = len(rank_list)
-        avg = sum(rank_list) / count
-        med = statistics.median(rank_list)
-        stats_records.append({
-            "symbol": sym,
-            "times": count,
-            "avg_rank": avg,
-            "median_rank": med,
-        })
-    stats = pd.DataFrame(stats_records)
+
+    max_rank = ranks["rank"].max()
+    pivot = ranks.pivot(index="symbol", columns="time", values="rank")
+
+    times = pivot.notna().sum(axis=1)
+    pivot = pivot.fillna(max_rank + 1)
+
+    avg_rank = pivot.mean(axis=1)
+    median_rank = pivot.median(axis=1)
+
+    stats = pd.DataFrame({
+        "symbol": pivot.index,
+        "times": times,
+        "avg_rank": avg_rank,
+        "median_rank": median_rank,
+    })
+
     stats = stats.sort_values(["times", "avg_rank"], ascending=[False, True])
     return stats.reset_index(drop=True)
 
@@ -128,7 +158,14 @@ def main() -> None:
         print("No data in the selected time range")
         return
 
+    labels_map = get_labels_map()
+
     display_df = stats.copy()
+    display_df["label"] = display_df["symbol"].map(
+        lambda s: "，".join(labels_map.get(s, [])) if labels_map.get(s) else ""
+    )
+    cols = ["label"] + [c for c in display_df.columns if c != "label"]
+    display_df = display_df[cols]
     display_df["avg_rank"] = display_df["avg_rank"].map(lambda x: f"{x:.2f}")
     display_df["median_rank"] = display_df["median_rank"].map(lambda x: f"{x:.2f}")
     print(format_ascii_table(display_df))
