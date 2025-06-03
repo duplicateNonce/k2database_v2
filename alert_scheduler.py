@@ -13,7 +13,7 @@ from monitor_bot import (
 def main() -> None:
     ensure_table()
     ensure_up_tables()
-    send_message("4h 连涨警报开始运行")
+    send_message("alert scheduler started")
     while True:
         start = time.time()
         check_prices()
