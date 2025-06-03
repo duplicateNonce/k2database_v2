@@ -3,18 +3,19 @@
 
 For each of the latest 24 hours this script calculates the price
 change percentage between the hour's open and close.  Each hour's
-symbols are ranked by this percentage and the top 40 records are kept.
-Finally the script counts how many times each symbol appears in the
-hourly top 40 list and computes its average and median rank.
+symbols are ranked by this percentage.  All ranks are retained when
+calculating statistics so that tokens outside the hourly top 40 still
+contribute their actual positions.  ``times`` still counts how many
+hours a symbol made it into the top 40.
 """
 
 from __future__ import annotations
 
-import statistics
 from typing import Dict, List
 
 import pandas as pd
 import psycopg2
+import unicodedata
 
 from config import secret_get
 
@@ -75,39 +76,39 @@ def fetch_range(start_ts: int, end_ts: int) -> pd.DataFrame:
 
 
 def hourly_rank(df: pd.DataFrame) -> pd.DataFrame:
-    """Return records of hourly ranking (top 40)."""
+    """Return records of hourly ranking for **all** symbols."""
     if df.empty:
         return pd.DataFrame(columns=["time", "symbol", "pct", "rank"])
+
     df["pct"] = (df["close"] - df["open"]) / df["open"] * 100
-    records: List[dict] = []
-    for ts, grp in df.groupby("time"):
-        grp_sorted = grp.sort_values("pct", ascending=False).head(40)
-        grp_sorted = grp_sorted.reset_index(drop=True)
-        for idx, row in grp_sorted.iterrows():
-            records.append({
-                "time": ts,
-                "symbol": row["symbol"],
-                "pct": float(row["pct"]),
-                "rank": idx + 1,
-            })
-    return pd.DataFrame(records)
+    df["rank"] = (
+        df.groupby("time")["pct"].rank(ascending=False, method="min").astype(int)
+    )
+
+    df = df.sort_values(["time", "rank"])  # nicer ordering
+    return df[["time", "symbol", "pct", "rank"]]
 
 
 def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
     """Aggregate ranking statistics for each symbol.
 
-    ``avg_rank`` and ``median_rank`` include hours where the symbol did
-    not enter the top list (counted as rank ``max_rank + 1``).
+    ``avg_rank`` and ``median_rank`` include hours where the symbol did not
+    enter the top list.  Missing hours are counted as one rank worse than the
+    worst actual rank for that hour. ``times`` counts how often a symbol ranked
+    within the top 40.
     """
 
     if ranks.empty:
         return pd.DataFrame(columns=["symbol", "times", "avg_rank", "median_rank"])
 
-    max_rank = ranks["rank"].max()
     pivot = ranks.pivot(index="symbol", columns="time", values="rank")
 
-    times = pivot.notna().sum(axis=1)
-    pivot = pivot.fillna(max_rank + 1)
+    times = (pivot <= 40).sum(axis=1)
+
+    max_rank_by_time = ranks.groupby("time")["rank"].max()
+    pivot = pivot.apply(
+        lambda col: col.fillna(max_rank_by_time[col.name] + 1)
+    )
 
     avg_rank = pivot.mean(axis=1)
     median_rank = pivot.median(axis=1)
@@ -123,24 +124,46 @@ def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
     return stats.reset_index(drop=True)
 
 
+def _display_width(text: str) -> int:
+    """Return the display width accounting for wide characters."""
+    width = 0
+    for ch in text:
+        if unicodedata.east_asian_width(ch) in ("F", "W"):
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def _ljust_display(text: str, width: int) -> str:
+    """Left justify ``text`` considering display width."""
+    pad = width - _display_width(text)
+    if pad > 0:
+        return text + " " * pad
+    return text
+
+
 def format_ascii_table(df: pd.DataFrame) -> str:
     """Return ``df`` formatted as a simple ASCII table."""
     if df.empty:
         return ""
+
     headers = list(df.columns)
     rows = [[str(v) for v in row] for row in df.itertuples(index=False)]
-    widths = [len(h) for h in headers]
+
+    widths = [_display_width(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
-            if len(cell) > widths[i]:
-                widths[i] = len(cell)
+            w = _display_width(cell)
+            if w > widths[i]:
+                widths[i] = w
 
     border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
-    header_line = "| " + " | ".join(h.ljust(widths[i]) for i, h in enumerate(headers)) + " |"
+    header_line = "| " + " | ".join(_ljust_display(headers[i], widths[i]) for i in range(len(headers))) + " |"
     sep_line = "+" + "+".join("=" * (w + 2) for w in widths) + "+"
     lines = [border, header_line, sep_line]
     for row in rows:
-        line = "| " + " | ".join(row[i].ljust(widths[i]) for i in range(len(headers))) + " |"
+        line = "| " + " | ".join(_ljust_display(row[i], widths[i]) for i in range(len(headers))) + " |"
         lines.append(line)
     lines.append(border)
     return "\n".join(lines)
