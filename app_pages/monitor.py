@@ -7,8 +7,11 @@ from db import engine_ohlcv
 from config import TZ_NAME
 
 
+IGNORED_SYMBOLS = {"USDCUSDT"}
+
+
 def ensure_table():
-    sql = """
+    sql1 = """
     CREATE TABLE IF NOT EXISTS monitor_levels (
         symbol TEXT PRIMARY KEY,
         start_ts BIGINT NOT NULL,
@@ -17,8 +20,14 @@ def ensure_table():
         alerted BOOLEAN NOT NULL DEFAULT FALSE
     );
     """
+    sql2 = """
+    CREATE TABLE IF NOT EXISTS ba_hidden (
+        symbol TEXT PRIMARY KEY
+    );
+    """
     with engine_ohlcv.begin() as conn:
-        conn.execute(text(sql))
+        conn.execute(text(sql1))
+        conn.execute(text(sql2))
 
 
 def compute_p1(start_ts: int, end_ts: int) -> pd.DataFrame:
@@ -104,4 +113,47 @@ def render_monitor():
             .dt.strftime("%Y-%m-%d %H:%M")
         )
     st.dataframe(df_exist)
+
+    st.subheader("/ba 全量数据")
+    df_ba = load_ba_data()
+    if df_ba.empty:
+        st.info("无有效数据")
+    else:
+        st.dataframe(df_ba, use_container_width=True)
+
+
+def load_ba_data() -> pd.DataFrame:
+    """Return /ba style ranking for all symbols."""
+    with engine_ohlcv.begin() as conn:
+        df_levels = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
+        hide = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
+        hidden = (
+            set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
+        )
+        rows: list[tuple[str, float, float, float]] = []
+        for _, row in df_levels.iterrows():
+            sym = row["symbol"]
+            u_sym = sym.upper()
+            if u_sym in IGNORED_SYMBOLS or u_sym in hidden:
+                continue
+            p1 = float(row["p1"])
+            last = conn.execute(
+                text("SELECT close FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
+                {"s": sym},
+            ).fetchone()
+            if not last:
+                continue
+            price = float(last[0])
+            diff_pct = (price - p1) / p1 * 100 if p1 else 0.0
+            rows.append((sym, price, p1, diff_pct))
+    if not rows:
+        return pd.DataFrame()
+    rows.sort(key=lambda x: x[3], reverse=True)
+    df_res = pd.DataFrame(rows, columns=["symbol", "price", "p1", "diff_pct"])
+    df_res["symbol"] = df_res["symbol"].str.replace("USDT", "")
+    df_res = df_res.rename(
+        columns={"symbol": "标的", "price": "现价", "p1": "区域最高价", "diff_pct": "差值%"}
+    )
+    df_res = df_res.round({"现价": 4, "区域最高价": 4, "差值%": 2})
+    return df_res
 
