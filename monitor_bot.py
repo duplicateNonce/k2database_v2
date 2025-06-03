@@ -121,10 +121,11 @@ def ba_command(chat_id: int) -> None:
             df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
             hide = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
             hidden = set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
+            labels = dict(conn.execute(text("SELECT instrument_id, labels FROM instruments")))
             if df.empty:
                 send_message("无 P1 数据", chat_id)
                 return
-            rows: list[tuple[str, float, float, float, float]] = []
+            rows: list[tuple[str, str, float, float, float]] = []
             for _, row in df.iterrows():
                 sym = row["symbol"]
                 u_sym = sym.upper()
@@ -139,20 +140,28 @@ def ba_command(chat_id: int) -> None:
                     continue
                 p2 = float(latest[0])
                 diff_pct = (p2 - p1) / p1 * 100 if p1 else 0.0
-                rows.append((sym, p2, p1, diff_pct))
+                lbl = labels.get(sym)
+                if lbl is None:
+                    lbl_text = ""
+                elif isinstance(lbl, list):
+                    lbl_text = "，".join(lbl)
+                else:
+                    lbl_text = str(lbl)
+                rows.append((sym, lbl_text, p2, p1, diff_pct))
             if not rows:
                 send_message("无有效数据", chat_id)
                 return
             # 按照与 P1 的差值百分比从大到小排序
-            rows.sort(key=lambda x: x[3], reverse=True)
+            rows.sort(key=lambda x: x[4], reverse=True)
             top10 = rows[:10]
             table = pd.DataFrame(
                 [
                     {
+                        "标签": r[1],
                         "Symbol": r[0].replace("USDT", ""),
-                        "现价": f"{r[1]:.4f}",
-                        "区域最高价": f"{r[2]:.4f}",
-                        "差值": f"{r[3]:+.2f}%",
+                        "现价": f"{r[2]:.4f}",
+                        "区域最高价": f"{r[3]:.4f}",
+                        "差值": f"{r[4]:+.2f}%",
                     }
                     for r in top10
                 ]
