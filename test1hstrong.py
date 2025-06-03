@@ -93,6 +93,29 @@ def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
     return stats.reset_index(drop=True)
 
 
+def format_ascii_table(df: pd.DataFrame) -> str:
+    """Return ``df`` formatted as a simple ASCII table."""
+    if df.empty:
+        return ""
+    headers = list(df.columns)
+    rows = [[str(v) for v in row] for row in df.itertuples(index=False)]
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if len(cell) > widths[i]:
+                widths[i] = len(cell)
+
+    border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    header_line = "| " + " | ".join(h.ljust(widths[i]) for i, h in enumerate(headers)) + " |"
+    sep_line = "+" + "+".join("=" * (w + 2) for w in widths) + "+"
+    lines = [border, header_line, sep_line]
+    for row in rows:
+        line = "| " + " | ".join(row[i].ljust(widths[i]) for i in range(len(headers))) + " |"
+        lines.append(line)
+    lines.append(border)
+    return "\n".join(lines)
+
+
 def main() -> None:
     end_ts = get_latest_ts()
     start_ts = end_ts - 23 * 3600 * 1000
@@ -105,9 +128,10 @@ def main() -> None:
         print("No data in the selected time range")
         return
 
-    print("symbol\tcount\tavg_rank\tmedian_rank")
-    for row in stats.itertuples(index=False):
-        print(f"{row.symbol}\t{row.times}\t{row.avg_rank:.2f}\t{row.median_rank:.2f}")
+    display_df = stats.copy()
+    display_df["avg_rank"] = display_df["avg_rank"].map(lambda x: f"{x:.2f}")
+    display_df["median_rank"] = display_df["median_rank"].map(lambda x: f"{x:.2f}")
+    print(format_ascii_table(display_df))
 
 
 if __name__ == "__main__":
