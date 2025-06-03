@@ -79,6 +79,21 @@ def render_monitor():
     ensure_table()
     st.header("Monitor")
 
+    if "p1_locked" not in st.session_state:
+        st.session_state["p1_locked"] = True
+    locked = st.session_state["p1_locked"]
+
+    lock_col1, lock_col2 = st.columns(2)
+    with lock_col1:
+        if locked:
+            if st.button("解锁 P1"):
+                st.session_state["p1_locked"] = False
+        else:
+            if st.button("锁定 P1"):
+                st.session_state["p1_locked"] = True
+    if locked:
+        st.info("P1 已锁定，解锁后才能重新计算")
+
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("开始日期", date.today() - timedelta(days=7))
@@ -87,7 +102,7 @@ def render_monitor():
         end_date = st.date_input("结束日期", date.today())
         end_time = st.time_input("结束时间", time(23, 59))
 
-    if st.button("计算并保存 P1"):
+    if st.button("计算并保存 P1", disabled=locked):
         tz = dt_timezone(timedelta(hours=8))
         start_dt = datetime.combine(start_date, start_time).replace(tzinfo=tz)
         end_dt = datetime.combine(end_date, end_time).replace(tzinfo=tz)

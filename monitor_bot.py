@@ -86,32 +86,107 @@ def ascii_table(df: pd.DataFrame) -> str:
 
 
 def check_prices() -> None:
-    """Alert when the latest price is higher than the saved P1."""
+    """Alert when price breaks above P1 with volume confirmation."""
     with engine_ohlcv.begin() as conn:
-        df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels WHERE NOT alerted", conn)
-        if df.empty:
+        df_levels = pd.read_sql(
+            "SELECT symbol, p1, start_ts, end_ts FROM monitor_levels WHERE NOT alerted",
+            conn,
+        )
+        if df_levels.empty:
             return
-        alerts = []
-        for _, row in df.iterrows():
-            sym = row["symbol"]
-            if sym.upper() in IGNORED_SYMBOLS:
+
+        syms = [s for s in df_levels["symbol"].tolist() if s.upper() not in IGNORED_SYMBOLS]
+        if not syms:
+            return
+
+        labels = {
+            r["instrument_id"]: r["labels"]
+            for r in conn.execute(text("SELECT instrument_id, labels FROM instruments")).mappings()
+        }
+
+        # fetch latest price and volume for all symbols in one query
+        sql = text(
+            """
+            SELECT o.symbol, o.time, o.close, o.volume_usd FROM ohlcv o
+            JOIN (
+                SELECT symbol, MAX(time) AS t
+                FROM ohlcv
+                WHERE symbol = ANY(:syms)
+                GROUP BY symbol
+            ) m ON o.symbol = m.symbol AND o.time = m.t
+            """
+        )
+        df_latest = pd.read_sql(sql, conn, params={"syms": syms})
+        latest_map = {r.symbol: r for r in df_latest.itertuples()}
+
+        rows = []
+        for _, lv in df_levels.iterrows():
+            sym = lv.symbol
+            last = latest_map.get(sym)
+            if not last:
                 continue
-            p1 = float(row["p1"])
-            latest = conn.execute(
-                text("SELECT close FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
-                {"s": sym},
+            p1 = float(lv.p1)
+            price = float(last.close)
+            if price <= p1:
+                continue
+
+            # find p1 time within saved range
+            p1_row = conn.execute(
+                text(
+                    "SELECT time FROM ohlcv WHERE symbol=:s AND time BETWEEN :a AND :b "
+                    "ORDER BY close DESC LIMIT 1"
+                ),
+                {"s": sym, "a": int(lv.start_ts), "b": int(lv.end_ts)},
             ).fetchone()
-            if not latest:
-                continue
-            price = float(latest[0])
-            if price > p1:
-                alerts.append(f"{sym} price {price} > P1 {p1}")
-                conn.execute(
-                    text("UPDATE monitor_levels SET alerted=true WHERE symbol=:s"),
-                    {"s": sym},
-                )
-        if alerts:
-            send_message("\n".join(alerts))
+            p1_time = p1_row[0] if p1_row else lv.start_ts
+
+            vol_df = pd.read_sql(
+                text(
+                    "SELECT volume_usd FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 96"
+                ),
+                conn,
+                params={"s": sym},
+            )
+            vol_ma = vol_df["volume_usd"].astype(float).mean() if not vol_df.empty else 0.0
+            cur_vol = float(getattr(last, "volume_usd", 0))
+            vol_change = (cur_vol - vol_ma) / vol_ma * 100 if vol_ma else 0.0
+            diff_pct = (price - p1) / p1 * 100 if p1 else 0.0
+
+            lbl = labels.get(sym)
+            if lbl is None:
+                lbl_text = ""
+            elif isinstance(lbl, list):
+                lbl_text = "，".join(lbl)
+            else:
+                lbl_text = str(lbl)
+
+            dt = (
+                pd.to_datetime(p1_time, unit="ms", utc=True)
+                .tz_convert("Asia/Shanghai")
+                .strftime("%m.%d %H:%M")
+            )
+
+            rows.append(
+                {
+                    "标签": lbl_text,
+                    "Symbol": sym.replace("USDT", ""),
+                    "P1时间": dt,
+                    "最新价格": f"{price:.4f}",
+                    "差值%": f"{diff_pct:+.2f}%",
+                    "量变化%": f"{vol_change:+.2f}%",
+                }
+            )
+
+            conn.execute(
+                text("UPDATE monitor_levels SET alerted=true WHERE symbol=:s"),
+                {"s": sym},
+            )
+
+        if rows:
+            rows.sort(key=lambda x: float(x["差值%"].rstrip("%")), reverse=True)
+            df_table = pd.DataFrame(rows)
+            msg = "```\n" + ascii_table(df_table) + "\n```"
+            send_message(msg)
 
 
 def ba_command(chat_id: int) -> None:
@@ -319,6 +394,34 @@ def consecutive_up_count(df4h: pd.DataFrame) -> int:
     return count
 
 
+def fetch_4h_closes(conn, symbol: str, limit: int = 30) -> list[float]:
+    """Return recent 4h closes from the ohlcv_4h table."""
+    df = pd.read_sql(
+        text(
+            f"SELECT close FROM ohlcv_4h WHERE symbol=:s ORDER BY time DESC LIMIT {limit}"
+        ),
+        conn,
+        params={"s": symbol},
+    )
+    return df["close"].astype(float).tolist()
+
+
+def consecutive_up_from_closes(closes: list[float]) -> tuple[int, float]:
+    """Return count of consecutive up closes and accumulated pct."""
+    count = 0
+    for i in range(len(closes) - 1):
+        if closes[i + 1] < closes[i]:
+            count += 1
+        else:
+            break
+    pct = 0.0
+    if count:
+        start = closes[count]
+        end = closes[0]
+        pct = (end - start) / start * 100 if start else 0.0
+    return count, pct
+
+
 def ensure_up_tables() -> None:
     sql = """
     CREATE TABLE IF NOT EXISTS four_hour_up_history (
@@ -340,11 +443,17 @@ def check_up_alert() -> None:
         for sym in syms:
             if sym.upper() in IGNORED_SYMBOLS:
                 continue
-            df4h = load_4h_data(conn, sym)
-            if df4h.empty:
+            closes = fetch_4h_closes(conn, sym)
+            if len(closes) < 2:
                 continue
-            streak = consecutive_up_count(df4h)
-            last_start = int(df4h["start"].iloc[-1].timestamp() * 1000)
+            streak, _ = consecutive_up_from_closes(closes)
+            latest_ts = conn.execute(
+                text(
+                    "SELECT time FROM ohlcv_4h WHERE symbol=:s ORDER BY time DESC LIMIT 1"
+                ),
+                {"s": sym},
+            ).scalar()
+            last_start = int(latest_ts) if latest_ts else 0
             prev = conn.execute(
                 text(
                     "SELECT count FROM four_hour_up_history WHERE symbol=:s ORDER BY ts DESC LIMIT 1"
@@ -391,10 +500,10 @@ def four_hour_command(chat_id: int) -> None:
         for sym in syms:
             if sym.upper() in IGNORED_SYMBOLS:
                 continue
-            df4h = load_4h_data(conn, sym)
-            if df4h.empty:
+            closes = fetch_4h_closes(conn, sym)
+            if len(closes) < 2:
                 continue
-            streak = consecutive_up_count(df4h)
+            streak, _ = consecutive_up_from_closes(closes)
             if streak >= UP_STREAK:
                 lines.append(f"{sym} 4h 连涨 {streak} 根")
         if lines:
