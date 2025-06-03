@@ -490,26 +490,43 @@ def history_command(chat_id: int) -> None:
 
 
 def four_hour_command(chat_id: int) -> None:
-    """Aggregate all OHLCV data into 4h candles and send alerts."""
+    """Reply with the top 10 symbols ranked by 4h up streak."""
     with engine_ohlcv.begin() as conn:
-        syms = [row[0] for row in conn.execute(text("SELECT symbol FROM monitor_levels"))]
+        syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_4h"))]
         if not syms:
-            send_message("无监控币种", chat_id)
+            send_message("无4h数据", chat_id)
             return
-        lines: list[str] = []
+
+        results: list[tuple[str, int, float]] = []
         for sym in syms:
             if sym.upper() in IGNORED_SYMBOLS:
                 continue
             closes = fetch_4h_closes(conn, sym)
             if len(closes) < 2:
                 continue
-            streak, _ = consecutive_up_from_closes(closes)
-            if streak >= UP_STREAK:
-                lines.append(f"{sym} 4h 连涨 {streak} 根")
-        if lines:
-            send_message("\n".join(lines), chat_id)
-        else:
-            send_message("无符合条件的交易对", chat_id)
+            cnt, pct = consecutive_up_from_closes(closes)
+            if cnt:
+                results.append((sym, cnt, pct))
+
+        if not results:
+            send_message("无有效数据", chat_id)
+            return
+
+        results.sort(key=lambda x: x[1], reverse=True)
+        top10 = results[:10]
+        table = pd.DataFrame(
+            [
+                {
+                    "symbol": r[0].replace("USDT", ""),
+                    "count": r[1],
+                    "累计涨幅": f"{r[2]:.2f}%",
+                }
+                for r in top10
+            ],
+            columns=["symbol", "count", "累计涨幅"],
+        )
+        msg = "```\n" + ascii_table(table) + "\n```"
+        send_message(msg, chat_id)
 
 
 def fetch_updates(offset: int) -> list[dict]:

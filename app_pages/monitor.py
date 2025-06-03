@@ -133,23 +133,22 @@ def render_monitor():
 
     if not df_exist.empty:
         with st.expander("手动修改 P1", expanded=False):
-            for _, row in df_exist.iterrows():
-                sym = row["symbol"]
-                with st.form(f"edit_{sym}"):
-                    st.write(f"{sym} 当前 P1: {row['p1']}")
-                    new_p1 = st.number_input(
-                        "新 P1", value=float(row["p1"]), key=f"p1_{sym}"
-                    )
-                    sub = st.form_submit_button("更新", disabled=locked)
-                    if sub:
-                        with engine_ohlcv.begin() as conn:
-                            conn.execute(
-                                text(
-                                    "UPDATE monitor_levels SET p1=:p, alerted=false WHERE symbol=:s"
-                                ),
-                                {"p": new_p1, "s": sym},
-                            )
-                        safe_rerun()
+            with st.form("edit_p1_form"):
+                symbols = df_exist["symbol"].tolist()
+                sel_sym = st.selectbox("选择标的", symbols)
+                cur_p1 = float(df_exist.set_index("symbol").loc[sel_sym, "p1"])
+                st.write(f"{sel_sym} 当前 P1: {cur_p1}")
+                new_p1 = st.number_input("新 P1", value=cur_p1)
+                sub = st.form_submit_button("更新", disabled=locked)
+                if sub:
+                    with engine_ohlcv.begin() as conn:
+                        conn.execute(
+                            text(
+                                "UPDATE monitor_levels SET p1=:p, alerted=false WHERE symbol=:s"
+                            ),
+                            {"p": new_p1, "s": sel_sym},
+                        )
+                    safe_rerun()
 
     # ---- Manage hidden symbols ----
     with st.expander("管理隐藏的标的", expanded=False):
@@ -176,6 +175,8 @@ def render_monitor():
             safe_rerun()
 
     st.subheader("/ba 全量数据")
+    if st.button("重新计算 /ba"):
+        safe_rerun()
     df_ba = load_ba_data()
     if df_ba.empty:
         st.info("无有效数据")
