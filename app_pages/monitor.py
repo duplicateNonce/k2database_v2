@@ -156,7 +156,10 @@ def load_ba_data() -> pd.DataFrame:
         hidden = (
             set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
         )
-        labels = dict(conn.execute(text("SELECT instrument_id, labels FROM instruments")))
+        labels = {
+            r["instrument_id"]: r["labels"]
+            for r in conn.execute(text("SELECT instrument_id, labels FROM instruments")).mappings()
+        }
 
         rows: list[tuple[str, str, float, float, float]] = []
         for _, row in df_levels.iterrows():

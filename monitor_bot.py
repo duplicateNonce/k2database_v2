@@ -121,7 +121,10 @@ def ba_command(chat_id: int) -> None:
             df = pd.read_sql("SELECT symbol, p1 FROM monitor_levels", conn)
             hide = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
             hidden = set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
-            labels = dict(conn.execute(text("SELECT instrument_id, labels FROM instruments")))
+            labels = {
+                r["instrument_id"]: r["labels"]
+                for r in conn.execute(text("SELECT instrument_id, labels FROM instruments")).mappings()
+            }
             if df.empty:
                 send_message("无 P1 数据", chat_id)
                 return
