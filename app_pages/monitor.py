@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, date, time, timedelta, timezone as dt_timezone
 from sqlalchemy import text
 
+from utils import safe_rerun
+
 from db import engine_ohlcv
 from config import TZ_NAME
 
@@ -114,6 +116,30 @@ def render_monitor():
         )
     st.dataframe(df_exist)
 
+    # ---- Manage hidden symbols ----
+    with st.expander("管理隐藏的标的", expanded=False):
+        with engine_ohlcv.begin() as conn:
+            all_syms = [row[0] for row in conn.execute(text("SELECT instrument_id FROM instruments"))]
+            hidden_df = pd.read_sql("SELECT symbol FROM ba_hidden", conn)
+            hidden = hidden_df["symbol"].tolist() if not hidden_df.empty else []
+
+        hide_sel = st.multiselect("隐藏标的", [s for s in all_syms if s not in hidden], key="hide_sel")
+        if st.button("隐藏", key="hide_btn") and hide_sel:
+            with engine_ohlcv.begin() as conn:
+                for sym in hide_sel:
+                    conn.execute(
+                        text("INSERT INTO ba_hidden(symbol) VALUES(:s) ON CONFLICT DO NOTHING"),
+                        {"s": sym},
+                    )
+            safe_rerun()
+
+        unhide_sel = st.multiselect("取消隐藏", hidden, key="unhide_sel")
+        if st.button("取消隐藏", key="unhide_btn") and unhide_sel:
+            with engine_ohlcv.begin() as conn:
+                for sym in unhide_sel:
+                    conn.execute(text("DELETE FROM ba_hidden WHERE symbol=:s"), {"s": sym})
+            safe_rerun()
+
     st.subheader("/ba 全量数据")
     df_ba = load_ba_data()
     if df_ba.empty:
@@ -130,7 +156,9 @@ def load_ba_data() -> pd.DataFrame:
         hidden = (
             set(s.upper() for s in hide["symbol"].tolist()) if not hide.empty else set()
         )
-        rows: list[tuple[str, float, float, float]] = []
+        labels = dict(conn.execute(text("SELECT instrument_id, labels FROM instruments")))
+
+        rows: list[tuple[str, str, float, float, float]] = []
         for _, row in df_levels.iterrows():
             sym = row["symbol"]
             u_sym = sym.upper()
@@ -145,14 +173,27 @@ def load_ba_data() -> pd.DataFrame:
                 continue
             price = float(last[0])
             diff_pct = (price - p1) / p1 * 100 if p1 else 0.0
-            rows.append((sym, price, p1, diff_pct))
+            lbl = labels.get(sym)
+            if lbl is None:
+                lbl_text = ""
+            elif isinstance(lbl, list):
+                lbl_text = "，".join(lbl)
+            else:
+                lbl_text = str(lbl)
+            rows.append((sym, lbl_text, price, p1, diff_pct))
     if not rows:
         return pd.DataFrame()
-    rows.sort(key=lambda x: x[3], reverse=True)
-    df_res = pd.DataFrame(rows, columns=["symbol", "price", "p1", "diff_pct"])
+    rows.sort(key=lambda x: x[4], reverse=True)
+    df_res = pd.DataFrame(rows, columns=["symbol", "label", "price", "p1", "diff_pct"])
     df_res["symbol"] = df_res["symbol"].str.replace("USDT", "")
     df_res = df_res.rename(
-        columns={"symbol": "标的", "price": "现价", "p1": "区域最高价", "diff_pct": "差值%"}
+        columns={
+            "label": "标签",
+            "symbol": "标的",
+            "price": "现价",
+            "p1": "区域最高价",
+            "diff_pct": "差值%",
+        }
     )
     df_res = df_res.round({"现价": 4, "区域最高价": 4, "差值%": 2})
     return df_res
