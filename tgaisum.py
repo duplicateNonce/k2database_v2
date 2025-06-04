@@ -96,16 +96,22 @@ def aggregate_stats(ranks: pd.DataFrame, top_rank: int = 20) -> pd.DataFrame:
 
 
 def send_telegram(text: str, parse_mode: str | None = None) -> None:
+    """Send ``text`` to Telegram or print a notice when not configured."""
     token = TELEGRAM_BOT_TOKEN
     chat_id = TELEGRAM_CHAT_ID
     if not token or not chat_id:
+        print("Telegram not configured, message below:\n" + text)
         return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     if parse_mode:
         payload["parse_mode"] = parse_mode
+
     try:
-        requests.post(url, json=payload, timeout=10, proxies=PROXIES or None)
+        resp = requests.post(url, json=payload, timeout=10, proxies=PROXIES or None)
+        if resp.status_code != 200:
+            print("Failed to send telegram message:", resp.text)
     except Exception as exc:
         print("Failed to send telegram message:", exc)
 
