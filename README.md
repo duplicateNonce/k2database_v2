@@ -85,7 +85,8 @@ TELEGRAM_CHAT_ID=your_chat_id
 ```
 
 You can also define the same variables in `secrets.toml` when deploying to
-Streamlit Cloud.
+Streamlit Cloud.  If these variables are missing, the helper will print the
+message to stdout instead of silently ignoring it so local testing is easier.
 
 ## Streamlit notes
 
