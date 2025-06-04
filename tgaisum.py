@@ -99,6 +99,7 @@ def send_telegram(text: str, parse_mode: str | None = None) -> None:
     token = TELEGRAM_BOT_TOKEN
     chat_id = TELEGRAM_CHAT_ID
     if not token or not chat_id:
+        print(text)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
@@ -138,6 +139,7 @@ def main() -> None:
 
     df = top_assets()
     if df.empty:
+        print("No ranking data available")
         return
 
     table_df = df[["symbol", "label", "avg_percentile"]].copy()
@@ -145,6 +147,8 @@ def main() -> None:
     table_df["avg_percentile"] = table_df["avg_percentile"].map(lambda x: f"{x:.2f}")
     table = format_ascii_table(table_df)
     send_telegram(f"```\n{table}\n```")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(table)
 
     parts = []
     for _, row in df.iterrows():
@@ -165,6 +169,8 @@ def main() -> None:
         parts.append(f"<b>{symbol}</b>\n{answer}")
     analysis_msg = "\n\n".join(parts)
     send_telegram(analysis_msg, parse_mode="HTML")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("\n" + analysis_msg)
 
 
 if __name__ == "__main__":
