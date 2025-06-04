@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import date, timedelta
+
 import requests
 import pandas as pd
 
@@ -42,16 +42,12 @@ def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
     }
-    today = date.today()
-    week_ago = today - timedelta(days=7)
     payload = {
         "messages": [{"role": "user", "content": prompt}],
         "model": MODEL,
         "search_parameters": {
             "mode": "auto",
             "return_citations": True,
-            "from_date": week_ago.isoformat(),
-            "to_date": today.isoformat(),
         },
     }
     for _ in range(retries + 1):
