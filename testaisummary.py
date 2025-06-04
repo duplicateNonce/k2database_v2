@@ -13,6 +13,7 @@ import os
 import time
 import requests
 import pandas as pd
+from datetime import datetime, timedelta
 
 from test1hstrong import (
     get_latest_ts,
@@ -31,7 +32,14 @@ API_URL = "https://api.x.ai/v1/chat/completions"
 MODEL = "grok-3-latest"
 
 
-def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
+def ask_xai(
+    prompt: str,
+    *,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    retries: int = 1,
+    timeout: int = 30,
+) -> str:
     """Query Grok with ``prompt`` and return the reply text.
 
     ``retries`` controls how many additional attempts are made if the
@@ -41,10 +49,15 @@ def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
     }
+    search_params = {"mode": "auto", "return_citations": True}
+    if from_date:
+        search_params["from_date"] = from_date
+    if to_date:
+        search_params["to_date"] = to_date
     payload = {
         "messages": [{"role": "user", "content": prompt}],
         "model": MODEL,
-        "search_parameters": {"mode": "auto", "return_citations": True},
+        "search_parameters": search_params,
     }
     for _ in range(retries + 1):
         try:
@@ -89,6 +102,8 @@ def main() -> None:
         print("No data available")
         return
     print("Top assets:\n", df[["symbol", "label"]].to_string(index=False))
+    to_date = datetime.utcnow().strftime("%Y-%m-%d")
+    from_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
     for _, row in df.iterrows():
         symbol = row["symbol"]
         label = row["label"] or "无"
@@ -103,7 +118,7 @@ def main() -> None:
         )
         print(f"\n==== {symbol} ====")
         try:
-            answer = ask_xai(prompt)
+            answer = ask_xai(prompt, from_date=from_date, to_date=to_date)
             print(answer)
         except Exception as exc:
             print(f"查询失败: {exc}")
