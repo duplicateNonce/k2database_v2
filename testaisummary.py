@@ -10,6 +10,7 @@ discussion, price influencing events and retail sentiment.
 from __future__ import annotations
 
 import os
+import time
 import requests
 import pandas as pd
 
@@ -30,8 +31,12 @@ API_URL = "https://api.x.ai/v1/chat/completions"
 MODEL = "grok-3-latest"
 
 
-def ask_xai(prompt: str) -> str:
-    """Query Grok with ``prompt`` and return the reply text."""
+def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
+    """Query Grok with ``prompt`` and return the reply text.
+
+    ``retries`` controls how many additional attempts are made if the
+    request times out or fails.
+    """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
@@ -41,15 +46,23 @@ def ask_xai(prompt: str) -> str:
         "model": MODEL,
         "search_parameters": {"mode": "auto", "return_citations": True},
     }
-    resp = requests.post(
-        API_URL, headers=headers, json=payload, proxies=PROXIES or None, timeout=15
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    try:
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return str(data)
+    for _ in range(retries + 1):
+        try:
+            resp = requests.post(
+                API_URL,
+                headers=headers,
+                json=payload,
+                proxies=PROXIES or None,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            if not retries:
+                raise
+            retries -= 1
+            time.sleep(2)
 
 
 def top_assets(limit: int = 5) -> pd.DataFrame:
@@ -79,12 +92,14 @@ def main() -> None:
     for _, row in df.iterrows():
         symbol = row["symbol"]
         label = row["label"] or "无"
+        search_symbol = symbol[:-4] if symbol.endswith("USDT") else symbol
+        search_symbol = f"${search_symbol}"
         prompt = (
             f"请用中文概述以下内容：\n"
             f"1. 当前 {label} 板块的整体情况；\n"
-            f"2. {symbol} 在社交媒体上的讨论情况；\n"
-            f"3. 近期影响 {symbol} 价格的事件；\n"
-            f"4. 散户投资者对 {symbol} 的情绪。"
+            f"2. {search_symbol} 在社交媒体上的讨论情况；\n"
+            f"3. 近期影响 {search_symbol} 价格的事件；\n"
+            f"4. 散户投资者对 {search_symbol} 的情绪。"
         )
         print(f"\n==== {symbol} ====")
         try:
