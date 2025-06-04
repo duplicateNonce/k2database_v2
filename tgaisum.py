@@ -137,7 +137,14 @@ def top_assets(limit: int = 5) -> pd.DataFrame:
     return stats.sort_values("avg_percentile", ascending=False).head(limit)
 
 
+def print_telegram_config() -> None:
+    """Print Telegram bot token and chat ID for debugging."""
+    print("TELEGRAM_BOT_TOKEN:", TELEGRAM_BOT_TOKEN)
+    print("TELEGRAM_CHAT_ID:", TELEGRAM_CHAT_ID)
+
+
 def main() -> None:
+    print_telegram_config()
     if not START_FILE.exists():
         send_telegram("4小时级别ai定时推送已启动")
         START_FILE.touch()
