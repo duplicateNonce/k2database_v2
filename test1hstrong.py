@@ -92,35 +92,56 @@ def hourly_rank(df: pd.DataFrame) -> pd.DataFrame:
 def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
     """Aggregate ranking statistics for each symbol.
 
-    ``avg_rank`` and ``median_rank`` include hours where the symbol did not
-    enter the top list.  Missing hours are counted as one rank worse than the
+    ``avg_percentile`` is the mean of each hour's percentile score where a
+    higher value means better performance. ``median_rank`` retains the original
+    median rank logic. Missing hours are counted as one rank worse than the
     worst actual rank for that hour. ``times`` counts how often a symbol ranked
     within the top 40.
     """
 
     if ranks.empty:
-        return pd.DataFrame(columns=["symbol", "times", "avg_rank", "median_rank"])
+        return pd.DataFrame(
+            columns=["symbol", "times", "avg_percentile", "median_rank"]
+        )
 
-    pivot = ranks.pivot(index="symbol", columns="time", values="rank")
+    # Pivot tables for percentile calculation and median rank
+    pivot_rank = ranks.pivot(index="symbol", columns="time", values="rank")
+    pivot_pct = ranks.pivot(index="time", columns="symbol", values="pct")
 
-    times = (pivot <= 40).sum(axis=1)
+    times = (pivot_rank <= 40).sum(axis=1)
 
     max_rank_by_time = ranks.groupby("time")["rank"].max()
-    pivot = pivot.apply(
+    pivot_rank = pivot_rank.apply(
         lambda col: col.fillna(max_rank_by_time[col.name] + 1)
     )
 
-    avg_rank = pivot.mean(axis=1)
-    median_rank = pivot.median(axis=1)
+    median_rank = pivot_rank.median(axis=1)
 
-    stats = pd.DataFrame({
-        "symbol": pivot.index,
-        "times": times,
-        "avg_rank": avg_rank,
-        "median_rank": median_rank,
-    })
+    # Calculate percentile scores for each hour
+    df_percentile = pd.DataFrame(
+        index=pivot_pct.index, columns=pivot_pct.columns, dtype=float
+    )
+    N = pivot_pct.shape[1]
+    for h in pivot_pct.index:
+        ranks_series = pivot_pct.loc[h].rank(
+            ascending=False, method="first", na_option="bottom"
+        )
+        df_percentile.loc[h] = (N - ranks_series) / (N - 1)
 
-    stats = stats.sort_values(["times", "avg_rank"], ascending=[False, True])
+    avg_percentile = df_percentile.mean(axis=0)
+
+    stats = pd.DataFrame(
+        {
+            "symbol": avg_percentile.index,
+            "times": times.reindex(avg_percentile.index).fillna(0).astype(int),
+            "avg_percentile": avg_percentile,
+            "median_rank": median_rank.reindex(avg_percentile.index),
+        }
+    )
+
+    stats = stats.sort_values(
+        ["times", "avg_percentile"], ascending=[False, False]
+    )
     return stats.reset_index(drop=True)
 
 
@@ -189,7 +210,9 @@ def main() -> None:
     )
     cols = ["label"] + [c for c in display_df.columns if c != "label"]
     display_df = display_df[cols]
-    display_df["avg_rank"] = display_df["avg_rank"].map(lambda x: f"{x:.2f}")
+    display_df["avg_percentile"] = display_df["avg_percentile"].map(
+        lambda x: f"{x:.2f}"
+    )
     display_df["median_rank"] = display_df["median_rank"].map(lambda x: f"{x:.2f}")
     print(format_ascii_table(display_df))
 
