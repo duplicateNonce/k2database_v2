@@ -67,7 +67,7 @@ def hourly_rank(df: pd.DataFrame) -> pd.DataFrame:
     return df[["time", "symbol", "pct", "rank"]]
 
 
-def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
+def aggregate_stats(ranks: pd.DataFrame, top_n: int = 40) -> pd.DataFrame:
     if ranks.empty:
         return pd.DataFrame(
             columns=["symbol", "times", "avg_percentile", "median_rank"]
@@ -76,7 +76,7 @@ def aggregate_stats(ranks: pd.DataFrame) -> pd.DataFrame:
     pivot_rank = ranks.pivot(index="symbol", columns="time", values="rank")
     pivot_pct = ranks.pivot(index="time", columns="symbol", values="pct")
 
-    times = (pivot_rank <= 40).sum(axis=1)
+    times = (pivot_rank <= top_n).sum(axis=1)
 
     max_rank_by_time = ranks.groupby("time")["rank"].max()
     pivot_rank = pivot_rank.apply(
@@ -120,6 +120,10 @@ def render_pct_change_rank_page():
         format_func=lambda x: f"最近 {x}h"
     )
 
+    top_n = st.number_input(
+        "计入次数的前 N 名", min_value=1, value=40, step=1
+    )
+
     if st.button("计算排名"):
         end_ts = get_latest_ts()
         start_ts = end_ts - (hours - 1) * 3600 * 1000
@@ -127,7 +131,7 @@ def render_pct_change_rank_page():
         with st.spinner("计算中..."):
             df = fetch_range(start_ts, end_ts)
             ranks = hourly_rank(df)
-            stats = aggregate_stats(ranks)
+            stats = aggregate_stats(ranks, int(top_n))
 
         if stats.empty:
             st.warning("指定区间没有数据")
