@@ -99,11 +99,11 @@ def main() -> None:
         search_symbol = symbol[:-4] if symbol.endswith("USDT") else symbol
         search_symbol = f"${search_symbol}"
         prompt = (
-            f"请用中文回答：\n"
+            f"搜索各类网站以及X平台上的全语言内容，请用中文回答：\n"
             f"1. 过去一个月哪些新闻、基本面变化或重要人物的观点影响了 {label} 板块的价格和估值？请100字内概括并给出评分；\n"
-            f"2. 基于 X 平台内容，总结近一周影响 {search_symbol} 价格的事件，100字内；\n"
-            f"3. 根据 X 上评论、点赞和转发统计散户对 {search_symbol} 的情绪，若有大V观点请单独说明，100字内并给出 0-100 的评分；\n"
-            f"4. 汇总近一个月技术分析博主对 {search_symbol} 的观点，列出阻力位、支撑位等关键指标，200字内概括。"
+            f"2. 基于 X 平台内容，总结本周（截止今天）影响 {search_symbol} 价格的事件，100字内；\n"
+            f"3. 根据 X 上评论、点赞和转发统计本周（截止今天）散户对 {search_symbol} 的情绪，若有大V观点请单独说明，100字内并给出 0-100 的评分；\n"
+            f"4. 汇总近一周（截止今天）技术分析博主对 {search_symbol} 的观点，列出阻力位、支撑位等关键指标，200字内概括。"
         )
         print(f"\n==== {symbol} ====")
         try:
