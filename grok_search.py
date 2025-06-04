@@ -82,10 +82,10 @@ def live_search_summary(query: str, limit: int = 10) -> str:
 
 def build_x_search_url(instrument_id: str, start: date, end: date) -> str:
     """Return X advanced search URL for a coin instrument."""
-    if instrument_id.endswith("USDT"):
-        coin = instrument_id[:-4]
-    else:
-        coin = instrument_id
+    coin = instrument_id
+    if coin.endswith("USDT"):
+        coin = coin[:-4]
+    coin = "$" + coin
     q = (
         f"{coin} min_replies:5 min_faves:5 min_retweets:2 "
         f"until:{end.isoformat()} since:{start.isoformat()}"
