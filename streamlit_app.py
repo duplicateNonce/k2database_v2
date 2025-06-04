@@ -11,6 +11,7 @@ from app_pages.history_rank import render_history_rank
 from app_pages.monitor import render_monitor
 from app_pages.long_short_analysis import render_long_short_analysis_page
 from app_pages.pct_change_rank import render_pct_change_rank_page
+from app_pages.airank import render_ai_rank_page
 
 from login import require_login, logout
 from utils import safe_rerun
@@ -20,6 +21,7 @@ PAGES = {
     "OHLCV": render_ohlcv_page,
     "历史排名": render_history_rank,
     "百分化涨幅排名": render_pct_change_rank_page,
+    "涨幅归因": render_ai_rank_page,
     "综合分析": render_combined_page,
     "AI-强势标的": render_ai_strong_assets_page,
     "底部抬升筛选": render_bottom_lift_page,
