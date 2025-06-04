@@ -214,8 +214,38 @@ def display_ai_result(symbol: str, answer: str) -> None:
     ]
     for i, text in enumerate(sections):
         title = titles[i] if i < len(titles) else f"\u7b2c {i + 1} \u90e8\u5206"
-        st.markdown(f"**{title}**")
-        st.write(text)
+        st.markdown(
+            f"<div style='font-size:18px;font-weight:bold;margin:0.2em 0'>{title}</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<div style='font-size:15px;line-height:1.5;margin-bottom:0.8em'>{text}</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def add_screenshot_button() -> None:
+    """Render a button to save current page as an image."""
+    st.markdown(
+        """
+        <button id="save-img" style="margin-bottom:1rem">\u6253\u5370\u5f53\u524d\u9875\u9762</button>
+        <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+        <script>
+        const btn = document.getElementById('save-img');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            html2canvas(document.body).then(canvas => {
+              const link = document.createElement('a');
+              link.download = 'ai_rank.png';
+              link.href = canvas.toDataURL('image/png');
+              link.click();
+            });
+          });
+        }
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ---- Streamlit page ----
@@ -223,6 +253,7 @@ def display_ai_result(symbol: str, answer: str) -> None:
 
 def render_ai_rank_page():
     st.title("\u6da8\u5e45\u5f52\u56e0")
+    add_screenshot_button()
 
     hours = st.selectbox(
         "\u7edf\u8ba1\u65f6\u957f (\u5c0f\u65f6)",
