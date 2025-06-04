@@ -9,8 +9,12 @@ API_URL = "https://api.x.ai/v1/chat/completions"
 
 payload = {
     "messages": [
-        {"role": "user", "content": "输出今天上海的天气情况"}
+        {"role": "user", "content": "告诉我今天crypto领域发生的3件大事"}
     ],
+    "search_parameters": {
+        "mode": "auto",
+        "return_citations": True,
+    },
     "model": "grok-3-latest",
 }
 
@@ -19,5 +23,7 @@ headers = {
     "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}"
 }
 
-response = requests.post(API_URL, headers=headers, json=payload, proxies=PROXIES or None)
+response = requests.post(
+    API_URL, headers=headers, json=payload, proxies=PROXIES or None
+)
 print(response.json())
