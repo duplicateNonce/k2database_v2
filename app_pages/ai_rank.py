@@ -202,9 +202,12 @@ def _split_answer(answer: str) -> list[str]:
     return parts
 
 
-def display_ai_result(symbol: str, answer: str) -> None:
+def display_ai_result(symbol: str, answer: str, font_color: str = "#333333") -> None:
     """Show AI summary with formatted headings."""
-    st.header(symbol)
+    st.markdown(
+        f"<h3 style='color:{font_color};margin-top:0'>{symbol}</h3>",
+        unsafe_allow_html=True,
+    )
     sections = _split_answer(answer)
     titles = [
         "\u8fc7\u53bb\u4e00\u4e2a\u6708\u65b0\u95fb\u7b49\u5f71\u54cd",
@@ -215,11 +218,11 @@ def display_ai_result(symbol: str, answer: str) -> None:
     for i, text in enumerate(sections):
         title = titles[i] if i < len(titles) else f"\u7b2c {i + 1} \u90e8\u5206"
         st.markdown(
-            f"<div style='font-size:18px;font-weight:bold;margin:0.2em 0'>{title}</div>",
+            f"<div style='font-size:18px;font-weight:bold;margin:0.2em 0;color:{font_color}'>{title}</div>",
             unsafe_allow_html=True,
         )
         st.markdown(
-            f"<div style='font-size:15px;line-height:1.5;margin-bottom:0.8em'>{text}</div>",
+            f"<div style='font-size:15px;line-height:1.5;margin-bottom:0.8em;color:{font_color}'>{text}</div>",
             unsafe_allow_html=True,
         )
 
@@ -234,7 +237,16 @@ def add_screenshot_button() -> None:
         const btn = document.getElementById('save-img');
         if (btn) {
           btn.addEventListener('click', () => {
-            html2canvas(document.body).then(canvas => {
+            const doc = document.documentElement;
+            html2canvas(doc, {
+              useCORS: true,
+              scale: 2,
+              width: doc.scrollWidth,
+              height: doc.scrollHeight,
+              windowWidth: doc.scrollWidth,
+              windowHeight: doc.scrollHeight,
+              scrollY: -window.scrollY
+            }).then(canvas => {
               const link = document.createElement('a');
               link.download = 'ai_rank.png';
               link.href = canvas.toDataURL('image/png');
@@ -254,6 +266,7 @@ def add_screenshot_button() -> None:
 def render_ai_rank_page():
     st.title("\u6da8\u5e45\u5f52\u56e0")
     add_screenshot_button()
+    font_color = st.color_picker("\u8f93\u51fa\u6587\u5b57\u989c\u8272", "#333333")
 
     hours = st.selectbox(
         "\u7edf\u8ba1\u65f6\u957f (\u5c0f\u65f6)",
@@ -305,7 +318,7 @@ def render_ai_rank_page():
             with st.spinner(f"{sym} \u5206\u6790\u4e2d..."):
                 try:
                     answer = get_ai_summary(sym, label)
-                    display_ai_result(sym, answer)
+                    display_ai_result(sym, answer, font_color)
                 except Exception as exc:
                     st.error(f"{sym} \u67e5\u8be2\u5931\u8d25: {exc}")
 
@@ -320,6 +333,6 @@ def render_ai_rank_page():
                 label = "\uff0c".join(labels_map.get(symbol, []))
                 try:
                     answer = get_ai_summary(symbol, label)
-                    display_ai_result(symbol, answer)
+                    display_ai_result(symbol, answer, font_color)
                 except Exception as exc:
                     st.error(f"\u67e5\u8be2\u5931\u8d25: {exc}")
