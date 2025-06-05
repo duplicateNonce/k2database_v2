@@ -13,6 +13,7 @@ from utils import update_shared_range, safe_rerun, short_time_range, format_time
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
 from app_pages.watchlist import load_watchlist, save_watchlist
+from label_watchlist import load_label_watchlist, save_label_watchlist
 
 
 def render_combined_page():
@@ -113,7 +114,6 @@ def render_combined_page():
         key="combo_sel_symbols",
     )
     if st.button("保存自选标的", key="combo_save_sel"):
-        st.session_state["combo_sel_symbols"] = sel_symbols
         save_watchlist(sel_symbols)
         st.success("已保存自选标的")
 
@@ -330,6 +330,36 @@ def render_combined_page():
             st.subheader("自选标签表现")
             sel = stats[stats["标签"].isin(selected)]
             st.dataframe(sel, use_container_width=True)
+
+        watch_labels = load_label_watchlist()
+        with st.expander("管理关注标签", expanded=False):
+            add_label = st.selectbox(
+                "添加标签",
+                [l for l in options if l not in watch_labels],
+                key="combo_add_label",
+            )
+            if st.button("添加标签", key="combo_add_label_btn"):
+                if add_label and add_label not in watch_labels:
+                    watch_labels.append(add_label)
+                    save_label_watchlist(watch_labels)
+                    st.success(f"已添加 {add_label}")
+                    safe_rerun()
+            if watch_labels:
+                for lbl in watch_labels:
+                    if st.button(f"删除 {lbl}", key=f"combo_del_label_{lbl}"):
+                        watch_labels.remove(lbl)
+                        save_label_watchlist(watch_labels)
+                        safe_rerun()
+            else:
+                st.write("暂无关注标签")
+
+        if watch_labels:
+            sel_lbl = stats[stats["标签"].isin(watch_labels)]
+            if not sel_lbl.empty:
+                st.subheader("关注标签表现")
+                st.dataframe(sel_lbl, use_container_width=True)
+            else:
+                st.info("关注标签未出现在当前结果中")
 
         for bucket in pivot.columns[::-1]:
             df_b = df[df["bucket"] == bucket]
