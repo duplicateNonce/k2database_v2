@@ -199,6 +199,7 @@ def render_strong_assets_page():
                 "drawdown (%)": "最大回撤",
             }
         )
+        df["期间收益"] = df["期间收益"].map("{:.2f}%".format)
 
         # 展示结果表格
         st.dataframe(df, use_container_width=True)

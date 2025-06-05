@@ -200,6 +200,7 @@ def render_combined_page():
                 "drawdown (%)": "最大回撤",
             }
         )
+        df["期间收益"] = df["期间收益"].map("{:.2f}%".format)
         st.dataframe(df, use_container_width=True)
 
 
@@ -254,7 +255,9 @@ def render_combined_page():
         bucket_labels = [
             f"{int(l*100)}%~{int(u*100)}%" for l, u in zip(bins[:-1], bins[1:])
         ]
-        df["bucket"] = pd.cut(df["return"], bins=bins, labels=bucket_labels, include_lowest=True)
+        df["bucket"] = pd.cut(
+            df["return"], bins=bins, labels=bucket_labels, include_lowest=True
+        )
         grp = (
             df.groupby(["label", "bucket"])["symbol"]
             .nunique()
@@ -268,12 +271,30 @@ def render_combined_page():
         pivot = pivot.loc[:, pivot.sum(axis=0) > 0]
         styled = pivot.style.format(lambda v: "" if v == 0 else v)
         st.dataframe(styled, use_container_width=True)
+
+        stats = (
+            df.groupby("label")["return"]
+            .agg(["mean", "median"])
+            .reset_index()
+            .rename(columns={"label": "标签", "mean": "平均涨幅", "median": "中位数涨幅"})
+        )
+        stats["平均涨幅"] = stats["平均涨幅"].map("{:.2%}".format)
+        stats["中位数涨幅"] = stats["中位数涨幅"].map("{:.2%}".format)
+        st.dataframe(stats, use_container_width=True)
+
         for bucket in pivot.columns[::-1]:
             df_b = df[df["bucket"] == bucket]
             if df_b.empty:
                 continue
-            with st.expander(f"{bucket} （共 {len(df_b)} 条）"):
-                df_show = df_b[["symbol", "label", "return"]].copy()
+            with st.expander(f"{bucket} （共 {df_b['symbol'].nunique()} 个标的）"):
+                df_show = (
+                    df_b.groupby("symbol")
+                    .agg({
+                        "label": lambda x: "，".join(sorted(set(x))),
+                        "return": "first",
+                    })
+                    .reset_index()
+                )
                 df_show["return"] = df_show["return"].map("{:.2%}".format)
                 st.dataframe(
                     df_show.sort_values(["return", "symbol"], ascending=[False, True]),

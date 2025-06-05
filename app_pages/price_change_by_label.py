@@ -186,12 +186,34 @@ def render_price_change_by_label():
     st.subheader("📈 标签分布概览")
     st.dataframe(styled, use_container_width=True)
 
+    stats = (
+        df.groupby("label")["return"]
+        .agg(["mean", "median"])
+        .reset_index()
+        .rename(columns={"label": "标签", "mean": "平均涨幅", "median": "中位数涨幅"})
+    )
+    stats["平均涨幅"] = stats["平均涨幅"].map("{:.2%}".format)
+    stats["中位数涨幅"] = stats["中位数涨幅"].map("{:.2%}".format)
+
+    st.subheader("📈 标签平均涨幅")
+    st.dataframe(stats, use_container_width=True)
+
     # —— 6. Expander 展开详情 —— 
     for bucket in pivot.columns[::-1]:  # 从涨幅大到小
-        df_b = df[df['bucket']==bucket]
-        if df_b.empty: continue
-        with st.expander(f"{bucket} （共 {len(df_b)} 条）"):
-            df_show = df_b[['symbol','label','return']].copy()
+        df_b = df[df['bucket'] == bucket]
+        if df_b.empty:
+            continue
+        with st.expander(f"{bucket} （共 {df_b['symbol'].nunique()} 个标的）"):
+            df_show = (
+                df_b.groupby('symbol')
+                .agg({
+                    'label': lambda x: '，'.join(sorted(set(x))),
+                    'return': 'first',
+                })
+                .reset_index()
+            )
             df_show['return'] = df_show['return'].map("{:.2%}".format)
-            st.dataframe(df_show.sort_values(['return','symbol'], ascending=[False,True]),
-                         use_container_width=True)
+            st.dataframe(
+                df_show.sort_values(['return', 'symbol'], ascending=[False, True]),
+                use_container_width=True,
+            )
