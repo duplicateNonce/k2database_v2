@@ -204,6 +204,7 @@ def render_ai_strong_assets_page():
                 "drawdown (%)": "最大回撤",
             }
         )
+        df["期间收益"] = df["期间收益"].map("{:.2f}%".format)
 
         # Cache result for later display outside this callback
         st.session_state["ai_sa_df"] = df
