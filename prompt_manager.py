@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Tuple, List
 
-PROMPT_FILE = Path("prompts.json")
+PROMPT_FILE = Path("prompt/prompts.json")
 
 
 def _load() -> dict:
