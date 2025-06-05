@@ -12,6 +12,7 @@ from app_pages.monitor import render_monitor
 from app_pages.long_short_analysis import render_long_short_analysis_page
 from app_pages.pct_change_rank import render_pct_change_rank_page
 from app_pages.ai_rank import render_ai_rank_page
+from app_pages.localtestprompt import render_localtestprompt_page
 
 from login import require_login, logout
 from utils import safe_rerun
@@ -29,6 +30,7 @@ PAGES = {
     "自选标的": render_watchlist_page,
     "Monitor": render_monitor,
     "多空持仓分析": render_long_short_analysis_page,
+    "Prompt测试": render_localtestprompt_page,
 }
 # 动态添加
 PAGES["编辑标的标签"] = render_label_assets_page

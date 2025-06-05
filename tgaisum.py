@@ -17,44 +17,13 @@ from test1hstrong import (
     get_labels_map,
     format_ascii_table,
 )
+from prompt_manager import get_prompt
+from grok_api import ask_xai
 from config import load_proxy_env, get_proxy_dict, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 # Ensure proxy variables are loaded
 load_proxy_env()
 PROXIES = get_proxy_dict()
-
-API_URL = "https://api.x.ai/v1/chat/completions"
-MODEL = "grok-3-latest"
-
-
-def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
-    """Query Grok and return the reply text."""
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
-    }
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "model": MODEL,
-        "search_parameters": {"mode": "auto", "return_citations": True},
-    }
-    for _ in range(retries + 1):
-        try:
-            resp = requests.post(
-                API_URL,
-                headers=headers,
-                json=payload,
-                proxies=PROXIES or None,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            if not retries:
-                raise
-            retries -= 1
-            time.sleep(2)
 
 
 def aggregate_stats(ranks: pd.DataFrame, top_rank: int = 20) -> pd.DataFrame:
@@ -164,13 +133,8 @@ def main() -> None:
         symbol = row["symbol"]
         label = row["label"] or "无"
         search_symbol = symbol[:-4] if symbol.endswith("USDT") else symbol
-        prompt = (
-            f"你是一个高级crypto交易者和分析师，行为经济学博士。针对资产 {search_symbol}（包括其常见名称、别名或全称、项目名称、search_symbol后接USDT），搜索各类网站以及X平台上的全语言内容，请用中文回答，省略风险提示：\n"
-            f"1. 过去一个月哪些新闻、基本面变化或重要人物(如以太坊/sol等基金会的核心人物/founder）的观点影响了 {label} 板块的价格和估值？请100字内概括并给出评分；\n"
-            f"2. 基于 X 平台内容，总结本周（截止今天）影响 {search_symbol} 价格的事件，100字内；\n"
-            f"3. 根据 X 上评论、点赞和转发统计本周（截止今天）散户对 {search_symbol} 的情绪，着重突出变化，尤其是今天的情绪和之前情绪的区别。若有大V观点（比如著名KOL）请单独说明，100字内并给出 0-100 的评分；\n"
-            f"4. 汇总近一周（截止今天）技术分析博主对 {search_symbol} 的观点，列出阻力位、支撑位等关键指标，200字内概括。"
-        )
+        _, template = get_prompt("tgaisum")
+        prompt = template.format(search_symbol=search_symbol, label=label)
         try:
             answer = ask_xai(prompt)
         except Exception as exc:

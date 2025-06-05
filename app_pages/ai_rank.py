@@ -1,4 +1,3 @@
-import os
 import json
 import time
 from pathlib import Path
@@ -6,10 +5,11 @@ import re
 
 import pandas as pd
 import psycopg2
-import requests
 import streamlit as st
 
-from config import secret_get, load_proxy_env, get_proxy_dict
+from config import secret_get
+from prompt_manager import get_prompt
+from grok_api import ask_xai
 
 DB_CFG = {
     "host": secret_get("DB_HOST", "127.0.0.1"),
@@ -18,12 +18,6 @@ DB_CFG = {
     "user": secret_get("DB_USER", "postgres"),
     "password": secret_get("DB_PASSWORD", ""),
 }
-
-load_proxy_env()
-PROXIES = get_proxy_dict()
-
-API_URL = "https://api.x.ai/v1/chat/completions"
-MODEL = "grok-3-latest"
 
 AI_CACHE_FILE = Path("data/airank_cache.json")
 
@@ -44,33 +38,6 @@ def _save_ai_cache(cache: dict) -> None:
     )
 
 
-def ask_xai(prompt: str, retries: int = 1, timeout: int = 30) -> str:
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
-    }
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "model": MODEL,
-        "search_parameters": {"mode": "auto", "return_citations": True},
-    }
-    for _ in range(retries + 1):
-        try:
-            resp = requests.post(
-                API_URL,
-                headers=headers,
-                json=payload,
-                proxies=PROXIES or None,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            if not retries:
-                raise
-            retries -= 1
-            time.sleep(2)
 
 
 # ---- DB helpers copied from pct_change_rank.py ----
@@ -175,20 +142,15 @@ def aggregate_stats(ranks: pd.DataFrame, top_n: int = 40) -> pd.DataFrame:
 def get_ai_summary(symbol: str, label: str) -> str:
     cache = _load_ai_cache()
     hour_key = int(time.time() // 3600)
+    version, template = get_prompt("ai_rank")
     entry = cache.get(symbol)
-    if entry and entry.get("hour") == hour_key:
+    if entry and entry.get("hour") == hour_key and entry.get("version") == version:
         return entry.get("answer", "")
 
     search_symbol = symbol[:-4] if symbol.endswith("USDT") else symbol
-    prompt = (
-        f"\u4f60\u662f\u4e00\u4e2a\u9ad8\u7ea7crypto\u4ea4\u6613\u8005\u548c\u5206\u6790\u5e08\uff0c\u884c\u4e3a\u7ecf\u6d4e\u5b66\u535a\u58eb\u3002\u9488\u5bf9\u8d44\u4ea7 {search_symbol}\uff08\u5305\u62ec\u5176\u5e38\u89c1\u540d\u79f0\u3001\u522b\u540d\u6216\u5168\u79f0\u3001\u9879\u76ee\u540d\u79f0\u3001search_symbol\u540e\u63d0USDT\uff09\uff0c\u641c\u7d22\u5404\u7c7b\u7f51\u7ad9\u4ee5\u53caX\u5e73\u53f0\u4e0a\u7684\u5168\u8bed\u8a00\u5185\u5bb9\uff0c\u8bf7\u7528\u4e2d\u6587\u56de\u7b54\uff0c\u7701\u7565\u98ce\u9669\u63d0\u793a:\n"
-        f"1. \u8fc7\u53bb\u4e00\u4e2a\u6708\u54ea\u4e9b\u65b0\u95fb\u3001\u57fa\u672c\u9762\u53d8\u5316\u6216\u91cd\u8981\u4eba\u7269(\u5982\u4ee5\u592a\u574a/sol\u7b49\u57fa\u91d1\u4f1a\u7684\u6838\u5fc3\u4eba\u7269/founder)\u7684\u89c2\u70b9\u5f71\u54cd\u4e86 {label or '无'} \u677f\u5757\u7684\u4ef7\u683c\u548c\u4f30\u503c\uff1f\u8bf7100\u5b57\u5185\u6982\u62ec\u5e76\u7ed9\u51fa\u8bc4\u5206;\n"
-        f"2. \u57fa\u4e8e X \u5e73\u53f0\u5185\u5bb9\uff0c\u603b\u7ed3\u672c\u5468(\u622a\u6b62\u4eca\u5929)\u5f71\u54cd {search_symbol} \u4ef7\u683c\u7684\u4e8b\u4ef6\uff0c100\u5b57\u5185;\n"
-        f"3. \u6839\u636e X \u4e0a\u8bc4\u8bba\u3001\u70b9\u8d5e\u548c\u8f6c\u53d1\u7edf\u8ba1\u672c\u5468(\u622a\u6b62\u4eca\u5929)\u6563\u6237\u5bf9 {search_symbol} \u7684\u60c5\u7eea\uff0c\u7740\u91cd\u7d2f\u51fa\u53d8\u5316\uff0c\u5c24\u5176\u662f\u4eca\u5929\u7684\u60c5\u7eea\u548c\u4e4b\u524d\u60c5\u7eea\u7684\u533a\u522b\u3002\u82e5\u6709\u5927V\u89c2\u70b9(\u6bd4\u5982\u8457\u540dKOL)\u8bf7\u5355\u72ec\u8bf4\u660e\uff0c100\u5b57\u5185\u5e76\u7ed9\u51fa 0-100 \u7684\u8bc4\u5206;\n"
-        f"4. \u6c47\u603b\u8fd1\u4e00\u5468(\u622a\u6b62\u4eca\u5929)\u6280\u672f\u5206\u6790\u535a\u4e3b\u5bf9 {search_symbol} \u7684\u89c2\u70b9\uff0c\u5217\u51fa\u963b\u529b\u4f4d\u3001\u652f\u6491\u4f4d\u7b49\u5173\u952e\u6307\u6807\uff0c200\u5b57\u5185\u6982\u62ec."
-    )
+    prompt = template.format(search_symbol=search_symbol, label=label or "无")
     answer = ask_xai(prompt)
-    cache[symbol] = {"hour": hour_key, "answer": answer}
+    cache[symbol] = {"version": version, "hour": hour_key, "answer": answer}
     _save_ai_cache(cache)
     return answer
 
