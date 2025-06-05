@@ -13,6 +13,7 @@ from utils import update_shared_range, safe_rerun, short_time_range, format_time
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
 from label_watchlist import load_label_watchlist, save_label_watchlist
+from app_pages.watchlist import load_watchlist, save_watchlist
 
 
 def render_combined_page():
@@ -117,6 +118,35 @@ def render_combined_page():
     history_extra = {}
 
     st.subheader("强势标的筛选")
+
+    # ---- Manage symbol watchlist ----
+    watchlist = load_watchlist()
+    with st.expander("管理自选标的", expanded=False):
+        with engine_ohlcv.connect() as conn:
+            all_syms = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+        add_sym = st.selectbox(
+            "添加标的",
+            [s for s in all_syms if s not in watchlist],
+            key="combo_sym_add",
+        )
+        if st.button("添加", key="combo_sym_add_btn"):
+            if add_sym and add_sym not in watchlist:
+                watchlist.append(add_sym)
+                save_watchlist(watchlist)
+                st.success(f"已添加 {add_sym}")
+                safe_rerun()
+        if watchlist:
+            for sym in watchlist:
+                if st.button(f"删除 {sym}", key=f"combo_del_sym_{sym}"):
+                    watchlist.remove(sym)
+                    save_watchlist(watchlist)
+                    safe_rerun()
+        else:
+            st.write("暂无自选标的")
+
+    if watchlist:
+        st.markdown("当前自选标的：" + ", ".join(sorted(watchlist)))
+
     run_sa = st.button("计算强势标的", key="combo_sa_btn")
     if run_sa or run_all:
         sa_params = {
@@ -128,12 +158,14 @@ def render_combined_page():
         sa_cache_id, df = load_cached("strong_assets", sa_params)
         if df is None or "first_close" not in df.columns:
             with engine_ohlcv.connect() as conn:
-                symbols = [
+                all_symbols = [
                     row[0]
                     for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
                 ]
                 result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
                 labels_map = {instr_id: labels for instr_id, labels in result}
+
+            symbols = [s for s in watchlist if s in all_symbols] if watchlist else all_symbols
 
             records = []
             for symbol in symbols:
@@ -154,6 +186,9 @@ def render_combined_page():
             with engine_ohlcv.connect() as conn:
                 result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
                 labels_map = {instr_id: labels for instr_id, labels in result}
+
+        if watchlist:
+            df = df[df["symbol"].isin(watchlist)]
 
         history_extra["sa_id"] = sa_cache_id
         if not run_all:
