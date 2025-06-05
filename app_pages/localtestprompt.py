@@ -6,7 +6,7 @@ import streamlit as st
 from prompt_manager import get_prompt, save_prompt, list_versions
 from grok_api import ask_xai
 
-CACHE_FILE = Path("data/localprompt_cache.json")
+CACHE_FILE = Path("prompt/localprompt_cache.json")
 
 
 def _load_cache() -> dict:
@@ -39,10 +39,11 @@ def _run_prompt(symbol: str, label: str, version: str, prompt: str) -> str:
 
 def render_localtestprompt_page() -> None:
     st.title("Prompt \u5c55\u793a\u6d4b\u8bd5")
+    prompt_name = st.text_input("Prompt \u540d\u79f0", "localtestprompt")
     symbol = st.text_input("\u4ee3\u5e01", "BTCUSDT")
     label = st.text_input("\u6807\u7b7e", "")
 
-    versions = list_versions("localtestprompt")
+    versions = list_versions(prompt_name)
     if not versions:
         versions = ["v1"]
 
@@ -50,22 +51,22 @@ def render_localtestprompt_page() -> None:
 
     with col_a:
         ver_a = st.selectbox("Prompt A \u7248\u672c", versions, index=len(versions) - 1)
-        _, default_a = get_prompt("localtestprompt", ver_a)
+        _, default_a = get_prompt(prompt_name, ver_a)
         prompt_a = st.text_area("Prompt A", value=default_a, height=200)
         if st.button("\u4fdd\u5b58A", key="save_a"):
-            save_prompt("localtestprompt", ver_a, prompt_a)
+            save_prompt(prompt_name, ver_a, prompt_a)
         if st.button("\u8fd0\u884cA", key="run_a"):
             formatted = prompt_a.format(search_symbol=symbol.replace("USDT", ""), label=label or "无")
             ans = _run_prompt(symbol + "_A", label, ver_a, formatted)
-            st.markdown(ans)
+            st.markdown(f"**\u7248\u672c: {ver_a}**\n{ans}")
 
     with col_b:
         ver_b = st.selectbox("Prompt B \u7248\u672c", versions, index=len(versions) - 1, key="ver_b")
-        _, default_b = get_prompt("localtestprompt", ver_b)
+        _, default_b = get_prompt(prompt_name, ver_b)
         prompt_b = st.text_area("Prompt B", value=default_b, height=200, key="prompt_b")
         if st.button("\u4fdd\u5b58B", key="save_b"):
-            save_prompt("localtestprompt", ver_b, prompt_b)
+            save_prompt(prompt_name, ver_b, prompt_b)
         if st.button("\u8fd0\u884cB", key="run_b"):
             formatted = prompt_b.format(search_symbol=symbol.replace("USDT", ""), label=label or "无")
             ans = _run_prompt(symbol + "_B", label, ver_b, formatted)
-            st.markdown(ans)
+            st.markdown(f"**\u7248\u672c: {ver_b}**\n{ans}")
