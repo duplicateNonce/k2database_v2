@@ -12,6 +12,7 @@ from app_pages.price_change_by_label import (
 from utils import update_shared_range, safe_rerun, short_time_range, format_time_col
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
+from label_watchlist import load_label_watchlist, save_label_watchlist
 
 
 def render_combined_page():
@@ -281,6 +282,36 @@ def render_combined_page():
         stats["平均涨幅"] = stats["平均涨幅"].map("{:.2%}".format)
         stats["中位数涨幅"] = stats["中位数涨幅"].map("{:.2%}".format)
         st.dataframe(stats, use_container_width=True)
+
+        # ---- Selected label board ----
+        watchlist = load_label_watchlist()
+        with st.expander("管理关注标签", expanded=False):
+            options = stats["标签"].tolist()
+            add_lbl = st.selectbox(
+                "添加关注标签", [l for l in options if l not in watchlist], key="combo_lbl_add"
+            )
+            if st.button("添加", key="combo_lbl_add_btn"):
+                if add_lbl and add_lbl not in watchlist:
+                    watchlist.append(add_lbl)
+                    save_label_watchlist(watchlist)
+                    st.success(f"已添加 {add_lbl}")
+                    safe_rerun()
+            if watchlist:
+                for lbl in watchlist:
+                    if st.button(f"删除 {lbl}", key=f"combo_del_{lbl}"):
+                        watchlist.remove(lbl)
+                        save_label_watchlist(watchlist)
+                        safe_rerun()
+            else:
+                st.write("暂无关注标签")
+
+        if watchlist:
+            st.subheader("关注标签表现")
+            sel = stats[stats["标签"].isin(watchlist)]
+            if not sel.empty:
+                st.dataframe(sel, use_container_width=True)
+            else:
+                st.info("关注标签未出现在当前结果中")
 
         for bucket in pivot.columns[::-1]:
             df_b = df[df["bucket"] == bucket]
