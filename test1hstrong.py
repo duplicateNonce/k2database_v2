@@ -164,6 +164,16 @@ def _ljust_display(text: str, width: int) -> str:
     return text
 
 
+def _center_display(text: str, width: int) -> str:
+    """Center ``text`` considering display width."""
+    pad = width - _display_width(text)
+    if pad <= 0:
+        return text
+    left = pad // 2
+    right = pad - left
+    return " " * left + text + " " * right
+
+
 def format_ascii_table(df: pd.DataFrame) -> str:
     """Return ``df`` formatted as a simple ASCII table."""
     if df.empty:
@@ -180,11 +190,11 @@ def format_ascii_table(df: pd.DataFrame) -> str:
                 widths[i] = w
 
     border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
-    header_line = "| " + " | ".join(_ljust_display(headers[i], widths[i]) for i in range(len(headers))) + " |"
+    header_line = "| " + " | ".join(_center_display(headers[i], widths[i]) for i in range(len(headers))) + " |"
     sep_line = "+" + "+".join("=" * (w + 2) for w in widths) + "+"
     lines = [border, header_line, sep_line]
     for row in rows:
-        line = "| " + " | ".join(_ljust_display(row[i], widths[i]) for i in range(len(headers))) + " |"
+        line = "| " + " | ".join(_center_display(row[i], widths[i]) for i in range(len(headers))) + " |"
         lines.append(line)
     lines.append(border)
     return "\n".join(lines)

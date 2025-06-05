@@ -176,8 +176,10 @@ def main() -> None:
         except Exception as exc:
             answer = f"查询失败: {exc}"
         parts.append(f"<b>{symbol}</b>\n{answer}")
-    analysis_msg = "\n\n".join(parts)
-    send_telegram(analysis_msg, parse_mode="HTML")
+
+    for part in parts:
+        send_telegram(part, parse_mode="HTML")
+        time.sleep(1)
 
 
 if __name__ == "__main__":
