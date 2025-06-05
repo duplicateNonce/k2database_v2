@@ -12,6 +12,7 @@ from app_pages.price_change_by_label import (
 from utils import update_shared_range, safe_rerun, short_time_range, format_time_col
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
+from app_pages.watchlist import load_watchlist, save_watchlist
 
 
 def render_combined_page():
@@ -101,6 +102,22 @@ def render_combined_page():
 
     update_shared_range(start_date, start_time, end_date, end_time)
 
+    # ---- Choose symbols to analyse ----
+    with engine_ohlcv.connect() as conn:
+        all_symbols = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+
+    sel_symbols = st.multiselect(
+        "选择自选标的",
+        all_symbols,
+        default=st.session_state.get("combo_sel_symbols", load_watchlist()),
+        key="combo_sel_symbols",
+    )
+    if st.button("保存自选标的", key="combo_save_sel"):
+        st.session_state["combo_sel_symbols"] = sel_symbols
+        save_watchlist(sel_symbols)
+        st.success("已保存自选标的")
+
+
     # These parameters are needed for history logging below. They are
     # normally collected later from widgets, but may not be available when
     # running the strong assets section first. Fetch them from session
@@ -127,10 +144,13 @@ def render_combined_page():
         sa_cache_id, df = load_cached("strong_assets", sa_params)
         if df is None or "first_close" not in df.columns:
             with engine_ohlcv.connect() as conn:
-                symbols = [
-                    row[0]
-                    for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
-                ]
+                if sel_symbols:
+                    symbols = sel_symbols
+                else:
+                    symbols = [
+                        row[0]
+                        for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+                    ]
                 result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
                 labels_map = {instr_id: labels for instr_id, labels in result}
 
@@ -201,8 +221,19 @@ def render_combined_page():
             }
         )
         df["期间收益"] = df["期间收益"].map("{:.2f}%".format)
-        st.dataframe(df, use_container_width=True)
+        st.session_state["combo_sa_df"] = df
 
+    if "combo_sa_df" in st.session_state:
+        df = st.session_state["combo_sa_df"]
+        st.dataframe(df, use_container_width=True)
+        watch_syms = st.session_state.get("combo_sel_symbols", [])
+        if watch_syms:
+            sub = df[df["代币名字"].isin(watch_syms)]
+            if not sub.empty:
+                st.subheader("自选标的表现")
+                st.dataframe(sub, use_container_width=True)
+            else:
+                st.info("自选标的不在当前结果中")
 
     st.subheader("标签化涨跌幅")
     run_label = st.button("计算标签涨跌幅", key="combo_label_btn")
@@ -270,7 +301,6 @@ def render_combined_page():
         )
         pivot = pivot.loc[:, pivot.sum(axis=0) > 0]
         styled = pivot.style.format(lambda v: "" if v == 0 else v)
-        st.dataframe(styled, use_container_width=True)
 
         stats = (
             df.groupby("label")["return"]
@@ -280,12 +310,22 @@ def render_combined_page():
         )
         stats["平均涨幅"] = stats["平均涨幅"].map("{:.2%}".format)
         stats["中位数涨幅"] = stats["中位数涨幅"].map("{:.2%}".format)
+        st.session_state["combo_label_df"] = df
+        st.session_state["combo_label_pivot"] = pivot
+        st.session_state["combo_label_stats"] = stats
+        if run_all:
+            add_entry("combined_analysis", user, history_params, history_extra)
+
+    if "combo_label_stats" in st.session_state:
+        pivot = st.session_state["combo_label_pivot"]
+        stats = st.session_state["combo_label_stats"]
+        df = st.session_state["combo_label_df"]
+        styled = pivot.style.format(lambda v: "" if v == 0 else v)
+        st.dataframe(styled, use_container_width=True)
         st.dataframe(stats, use_container_width=True)
 
-        # ---- Selected label board ----
         options = stats["标签"].tolist()
         selected = st.multiselect("选择标签", options, key="combo_lbl_select")
-
         if selected:
             st.subheader("自选标签表现")
             sel = stats[stats["标签"].isin(selected)]
@@ -309,5 +349,35 @@ def render_combined_page():
                     df_show.sort_values(["return", "symbol"], ascending=[False, True]),
                     use_container_width=True,
                 )
-        if run_all:
-            add_entry("combined_analysis", user, history_params, history_extra)
+
+    if "combo_sa_df" in st.session_state:
+        watch_syms = load_watchlist()
+        with st.expander("管理关注标的", expanded=False):
+            add_sym = st.selectbox(
+                "添加标的",
+                [s for s in all_symbols if s not in watch_syms],
+                key="combo_add_sym",
+            )
+            if st.button("添加", key="combo_add_sym_btn"):
+                if add_sym and add_sym not in watch_syms:
+                    watch_syms.append(add_sym)
+                    save_watchlist(watch_syms)
+                    st.success(f"已添加 {add_sym}")
+                    safe_rerun()
+            if watch_syms:
+                for sym in watch_syms:
+                    if st.button(f"删除 {sym}", key=f"combo_del_sym_{sym}"):
+                        watch_syms.remove(sym)
+                        save_watchlist(watch_syms)
+                        safe_rerun()
+            else:
+                st.write("暂无关注标的")
+
+        if watch_syms:
+            dfw = st.session_state["combo_sa_df"]
+            sel = dfw[dfw["代币名字"].isin(watch_syms)]
+            if not sel.empty:
+                st.subheader("关注标的表现")
+                st.dataframe(sel, use_container_width=True)
+            else:
+                st.info("关注标的未出现在当前结果中")
