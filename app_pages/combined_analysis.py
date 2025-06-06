@@ -141,38 +141,30 @@ def render_combined_page():
             "end_date": end_date.isoformat(),
             "end_time": end_time.isoformat(),
         }
-        sa_cache_id, df = load_cached("strong_assets", sa_params)
-        if df is None or "first_close" not in df.columns:
-            with engine_ohlcv.connect() as conn:
-                if sel_symbols:
-                    symbols = sel_symbols
-                else:
-                    symbols = [
-                        row[0]
-                        for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
-                    ]
-                result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
-                labels_map = {instr_id: labels for instr_id, labels in result}
+        # Always compute using all symbols so the full list is available
+        with engine_ohlcv.connect() as conn:
+            symbols = [
+                row[0]
+                for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+            ]
+            result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
+            labels_map = {instr_id: labels for instr_id, labels in result}
 
-            records = []
-            for symbol in symbols:
-                try:
-                    m = compute_period_metrics(symbol, start_ts, end_ts)
-                except ValueError:
-                    continue
-                m["symbol"] = symbol
-                records.append(m)
+        records = []
+        for symbol in symbols:
+            try:
+                m = compute_period_metrics(symbol, start_ts, end_ts)
+            except ValueError:
+                continue
+            m["symbol"] = symbol
+            records.append(m)
 
-            if not records:
-                st.warning("该区间内无数据")
-                return
+        if not records:
+            st.warning("该区间内无数据")
+            return
 
-            df = pd.DataFrame(records)
-            save_cached("strong_assets", sa_params, df)
-        else:
-            with engine_ohlcv.connect() as conn:
-                result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
-                labels_map = {instr_id: labels for instr_id, labels in result}
+        df = pd.DataFrame(records)
+        sa_cache_id = save_cached("strong_assets", sa_params, df)
 
         history_extra["sa_id"] = sa_cache_id
         if not run_all:
