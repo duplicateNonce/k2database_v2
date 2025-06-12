@@ -16,7 +16,7 @@ load_dotenv()
 DB_CFG = {
     "host": secret_get("DB_HOST", "127.0.0.1"),
     "port": secret_get("DB_PORT", "5432"),
-    "dbname": "tron_usd1",
+    "dbname": secret_get("TRON_DB_NAME", secret_get("DB_NAME", "tron_usd1")),
     "user": secret_get("DB_USER", "postgres"),
     "password": secret_get("DB_PASSWORD", ""),
 }
