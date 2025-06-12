@@ -50,6 +50,7 @@ DB_HOST     # database address, e.g. 127.0.0.1 for local testing
 DB_PORT     # usually 5432
 DB_USER     # database user
 DB_PASSWORD # database password
+TRON_DB_NAME # database used by tron_bot.py (defaults to DB_NAME)
 ```
 
 For example, a local `.env` could look like:
