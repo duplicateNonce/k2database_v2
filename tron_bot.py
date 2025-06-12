@@ -28,6 +28,17 @@ API_URL = (
 
 PROXIES = get_proxy_dict()
 TZ8 = timezone(timedelta(hours=8))
+LOG_FILE = "tron_bot.log"
+
+
+def log_result(message: str) -> None:
+    """Append a timestamped message to the log file."""
+    ts = datetime.now(TZ8).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{ts} - {message}\n")
+    except Exception as exc:
+        print("Failed to write log:", exc)
 
 
 def send_telegram(text: str) -> None:
@@ -113,9 +124,11 @@ def main() -> None:
         ensure_table()
         events = fetch_events()
         if not events:
+            log_result("no new result, not pushed")
             return
         new_events = insert_events(events)
         if not new_events:
+            log_result("no new result, not pushed")
             return
         msgs = []
         for e in new_events:
@@ -123,8 +136,11 @@ def main() -> None:
             tx_url = f"https://tronscan.org/#/transaction/{e['transaction_id']}"
             msgs.append(f"{ts_str}\n{e['event_name']}\n{tx_url}")
         send_telegram("\n\n".join(msgs))
+        log_result(f"pushed {len(new_events)} event(s)")
     except Exception:
-        send_telegram("tron_bot error:\n" + traceback.format_exc())
+        err = traceback.format_exc()
+        send_telegram("tron_bot error:\n" + err)
+        log_result("error: " + err.replace("\n", " | "))
 
 
 if __name__ == "__main__":
