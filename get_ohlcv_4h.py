@@ -68,7 +68,7 @@ def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
         f"?exchange=Binance"
         f"&symbol={symbol}"
         f"&interval=4h"
-        f"&limit=4500"
+        f"&limit=1500"
         f"&start_time={start_ts}"
         f"&end_time={end_ts}"
     )
@@ -153,7 +153,7 @@ def main() -> None:
         sys.exit(1)
 
     total = 0
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = [executor.submit(process_symbol, sym, start_ts, end_ts, tz8) for sym in symbols]
         for future in as_completed(futures):
             total += future.result()
