@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, time
 from db import engine_ohlcv
 from queries import fetch_ohlcv, fetch_instruments
 import pandas as pd
+from utils import quick_range_buttons
 
 def render_ohlcv_page():
     st.header("OHLCV 数据展示")
@@ -15,6 +16,13 @@ def render_ohlcv_page():
     start_time = st.time_input("开始时间", time(0, 0), key="ohlcv_start_time")
     end_date = st.date_input("结束日期", datetime.now(), key="ohlcv_end_date")
     end_time = st.time_input("结束时间", time(23, 59), key="ohlcv_end_time")
+
+    quick_range_buttons(
+        "ohlcv_start_date",
+        "ohlcv_start_time",
+        "ohlcv_end_date",
+        "ohlcv_end_time",
+    )
 
     if st.button("加载", key="ohlcv_btn"):
         # 用户输入的日期时间转换为毫秒级时间戳

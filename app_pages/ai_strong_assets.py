@@ -4,7 +4,13 @@ from sqlalchemy import text
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
 from query_history import add_entry, get_history
-from utils import safe_rerun, short_time_range, update_shared_range, format_time_col
+from utils import (
+    safe_rerun,
+    short_time_range,
+    update_shared_range,
+    format_time_col,
+    quick_range_buttons,
+)
 from result_cache import load_cached, save_cached
 import pandas as pd
 from grok_search import live_search_summary, x_search_summary
@@ -108,6 +114,13 @@ def render_ai_strong_assets_page():
             ),
             key="ai_sa_end_time",
         )
+
+    quick_range_buttons(
+        "ai_sa_start_date",
+        "ai_sa_start_time",
+        "ai_sa_end_date",
+        "ai_sa_end_time",
+    )
 
     if st.button("计算区间指标", key="ai_sa_btn"):
         # 合并日期时间并转毫秒，内部计算使用 UTC+8 时区

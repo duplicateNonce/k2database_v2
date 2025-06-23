@@ -9,7 +9,13 @@ from app_pages.price_change_by_label import (
     get_mappings,
     compute_period_metrics as label_compute,
 )
-from utils import update_shared_range, safe_rerun, short_time_range, format_time_col
+from utils import (
+    update_shared_range,
+    safe_rerun,
+    short_time_range,
+    format_time_col,
+    quick_range_buttons,
+)
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
 from app_pages.watchlist import load_watchlist, save_watchlist
@@ -94,6 +100,13 @@ def render_combined_page():
             ),
             key="combo_end_time",
         )
+
+    quick_range_buttons(
+        "combo_start_date",
+        "combo_start_time",
+        "combo_end_date",
+        "combo_end_time",
+    )
 
     tz = dt_timezone(timedelta(hours=8))
     start_dt = datetime.combine(start_date, start_time).replace(tzinfo=tz)
