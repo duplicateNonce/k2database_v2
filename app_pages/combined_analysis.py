@@ -212,11 +212,13 @@ def render_combined_page():
             .sort_values("period_return (%)", ascending=False)
             .reset_index(drop=True)
         )
+        start_label = start_dt.strftime("%m-%d %H:%M")
+        end_label = end_dt.strftime("%m-%d %H:%M")
         df = df.rename(
             columns={
                 "symbol": "代币名字",
-                "first_close": "时间1",
-                "last_close": "时间2",
+                "first_close": start_label,
+                "last_close": end_label,
                 "period_return (%)": "期间收益",
                 "max_close": "期间最高价",
                 "max_close_dt": "最高价时间",
