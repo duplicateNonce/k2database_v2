@@ -48,7 +48,7 @@ def analyze_bottom_lift(t1, t2, bars: int = 4, factor: float = 100.0) -> pd.Data
     records = []
     # 统一 SQL 模板，使用时间戳比较
     sql = (
-        "SELECT time, low FROM ohlcv "
+        "SELECT time, low FROM ohlcv_1h "
         "WHERE symbol = %(sym)s AND time BETWEEN %(start_ts)s AND %(end_ts)s"
     )
 

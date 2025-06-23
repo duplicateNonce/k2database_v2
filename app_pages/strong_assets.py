@@ -125,7 +125,7 @@ def render_strong_assets_page():
             with engine_ohlcv.connect() as conn:
                 symbols = [
                     row[0]
-                    for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+                    for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))
                 ]
                 result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
                 labels_map = {instr_id: labels for instr_id, labels in result}

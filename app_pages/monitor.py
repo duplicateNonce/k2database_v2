@@ -41,7 +41,7 @@ def compute_p1(start_ts: int, end_ts: int) -> pd.DataFrame:
         for sym in symbols:
             row = conn.execute(
                 text(
-                    "SELECT close, time FROM ohlcv "
+                    "SELECT close, time FROM ohlcv_1h "
                     "WHERE symbol=:s AND time BETWEEN :a AND :b "
                     "ORDER BY close DESC LIMIT 1"
                 ),
@@ -205,7 +205,7 @@ def load_ba_data() -> pd.DataFrame:
                 continue
             p1 = float(row["p1"])
             last = conn.execute(
-                text("SELECT close FROM ohlcv WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
+                text("SELECT close FROM ohlcv_1h WHERE symbol=:s ORDER BY time DESC LIMIT 1"),
                 {"s": sym},
             ).fetchone()
             if not last:

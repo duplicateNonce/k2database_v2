@@ -43,7 +43,7 @@ def compute_period_metrics(symbol, start_ts, end_ts):
         with engine_ohlcv.connect() as conn:
             df = pd.read_sql(
                 text(
-                    "SELECT time, high, low, close FROM ohlcv "
+                    "SELECT time, high, low, close FROM ohlcv_1h "
                     "WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
                 ),
                 conn,

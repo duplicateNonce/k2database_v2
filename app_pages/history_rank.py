@@ -92,13 +92,13 @@ def update_history() -> pd.DataFrame:
     def fetch_history(sym: str):
         if last_time is None:
             sql = text(
-                "SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym ORDER BY time"
+                "SELECT time, open, high, low, close, volume_usd FROM ohlcv_1h WHERE symbol=:sym ORDER BY time"
             )
             params = {"sym": sym}
         else:
             start_ms = int(last_time.tz_convert("UTC").timestamp() * 1000) - 96 * 15 * 60 * 1000
             sql = text(
-                "SELECT time, open, high, low, close, volume_usd FROM ohlcv WHERE symbol=:sym AND time >= :s ORDER BY time"
+                "SELECT time, open, high, low, close, volume_usd FROM ohlcv_1h WHERE symbol=:sym AND time >= :s ORDER BY time"
             )
             params = {"sym": sym, "s": start_ms}
         with engine_ohlcv.connect() as conn:
@@ -117,7 +117,7 @@ def update_history() -> pd.DataFrame:
         return df1d[["start", "symbol", "change"]]
 
     with engine_ohlcv.connect() as conn:
-        syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+        syms = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
     syms = [s for s in syms if s not in SKIP_SYMBOLS]
 
     # 使用更多线程提高增量更新速度

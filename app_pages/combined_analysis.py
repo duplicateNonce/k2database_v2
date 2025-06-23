@@ -105,7 +105,7 @@ def render_combined_page():
 
     # ---- Choose symbols to analyse ----
     with engine_ohlcv.connect() as conn:
-        all_symbols = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+        all_symbols = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
 
     sel_symbols = st.multiselect(
         "选择自选标的",
@@ -145,7 +145,7 @@ def render_combined_page():
         with engine_ohlcv.connect() as conn:
             symbols = [
                 row[0]
-                for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))
+                for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))
             ]
             result = conn.execute(text("SELECT instrument_id, labels FROM instruments"))
             labels_map = {instr_id: labels for instr_id, labels in result}
