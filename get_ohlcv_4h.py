@@ -17,6 +17,9 @@ REQ_TIMESTAMPS = []
 MAX_REQS_PER_MIN = 79
 REQ_LOCK = threading.Lock()
 
+# API request limit
+LIMIT = 1500
+
 # 加载环境变量并校验
 load_dotenv()
 API_KEY = secret_get("CG_API_KEY")
@@ -110,7 +113,7 @@ def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
         f"?exchange=Binance"
         f"&symbol={symbol}"
         f"&interval=4h"
-        f"&limit=1500"
+        f"&limit={LIMIT}"
         f"&start_time={start_ts}"
         f"&end_time={end_ts}"
     )
@@ -180,10 +183,10 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
         return 0, 0
 
     if latest is None:
-        start_ts = end_ts - interval * 4500
+        start_ts = end_ts - interval * LIMIT
     else:
         start_ts = latest + interval
-        min_start = end_ts - interval * 4500
+        min_start = end_ts - interval * LIMIT
         if start_ts < min_start:
             start_ts = min_start
 
