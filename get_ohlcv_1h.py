@@ -9,10 +9,11 @@ from dotenv import load_dotenv
 from config import secret_get
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
+from tqdm import tqdm
 
-# 最后一次 API 请求时间，用于速率限制
-LAST_REQ = 0.0
-# 锁，确保多线程速率限制
+# 请求时间记录，用于速率限制
+REQ_TIMESTAMPS = []
+MAX_REQS_PER_MIN = 79
 REQ_LOCK = threading.Lock()
 
 # 加载环境变量并校验
@@ -30,6 +31,19 @@ DB_CFG = {
     "user": secret_get("DB_USER", "postgres"),
     "password": secret_get("DB_PASSWORD", ""),
 }
+
+
+def wait_rate_limit() -> None:
+    """Ensure request rate within limit."""
+    with REQ_LOCK:
+        now = time.time()
+        REQ_TIMESTAMPS[:] = [t for t in REQ_TIMESTAMPS if now - t < 60]
+        if len(REQ_TIMESTAMPS) >= MAX_REQS_PER_MIN:
+            print(f"达到每分钟{MAX_REQS_PER_MIN}次请求上限，暂停10秒", flush=True)
+            time.sleep(10)
+            now = time.time()
+            REQ_TIMESTAMPS[:] = [t for t in REQ_TIMESTAMPS if now - t < 60]
+        REQ_TIMESTAMPS.append(time.time())
 
 
 def ensure_table():
@@ -77,18 +91,15 @@ def get_latest_db_ts() -> int | None:
     return int(row[0]) if row and row[0] is not None else None
 
 
-def is_up_to_date(symbol: str, target_ts: int) -> bool:
-    """检查 symbol 的最新时间戳是否不小于 target_ts"""
+def get_symbol_latest_ts(symbol: str) -> int | None:
+    """Return latest timestamp for the given symbol."""
     conn = psycopg2.connect(**DB_CFG)
     cur = conn.cursor()
-    cur.execute(
-        "SELECT time FROM ohlcv_1h WHERE symbol=%s ORDER BY time DESC LIMIT 1",
-        (symbol,),
-    )
+    cur.execute("SELECT MAX(time) FROM ohlcv_1h WHERE symbol=%s", (symbol,))
     row = cur.fetchone()
     cur.close()
     conn.close()
-    return bool(row) and int(row[0]) >= target_ts
+    return int(row[0]) if row and row[0] is not None else None
 
 
 def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
@@ -106,16 +117,10 @@ def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
 
 def fetch_ohlcv(symbol: str, start_ts: int, end_ts: int):
     """拉取指定交易对的 OHLCV，带速率限制和重试"""
-    global LAST_REQ
 
     url = build_url(symbol, start_ts, end_ts)
     for attempt in range(3):
-        with REQ_LOCK:
-            now = time.time()
-            wait = 1.0 - (now - LAST_REQ)
-            if wait > 0:
-                time.sleep(wait)
-            LAST_REQ = time.time()
+        wait_rate_limit()
         try:
             resp = requests.get(
                 url,
@@ -164,20 +169,36 @@ ON CONFLICT(symbol, time) DO NOTHING;
     return count
 
 
-def process_symbol(symbol: str, start_ts: int, end_ts: int, tz8) -> int:
+def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, int]:
     """处理单个交易对：下载并写入数据"""
-    if is_up_to_date(symbol, end_ts):
+    latest = get_symbol_latest_ts(symbol)
+    if latest is not None and latest >= end_ts:
         print(f"{symbol} 数据已是最新，跳过", flush=True)
-        return 0
+        return 0, 0
+
+    if latest is None:
+        start_ts = end_ts - interval * 4500
+    else:
+        start_ts = latest + interval
+        min_start = end_ts - interval * 4500
+        if start_ts < min_start:
+            start_ts = min_start
+
+    if start_ts > end_ts:
+        print(f"{symbol} 数据已是最新，跳过", flush=True)
+        return 0, 0
+
     try:
         records = fetch_ohlcv(symbol, start_ts, end_ts)
     except Exception as e:
         print(f"{symbol} 请求失败: {e}", flush=True)
-        return 0
+        return 0, 1
+
     n = len(records)
     if n == 0:
         print(f"{symbol} 请求0条数据 写入0条数据", flush=True)
-        return 0
+        return 0, 0
+
     written = insert_data(records)
     last_ts = max(r[1] for r in records)
     last_dt = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc).astimezone(tz8)
@@ -186,7 +207,7 @@ def process_symbol(symbol: str, start_ts: int, end_ts: int, tz8) -> int:
         f"{symbol} 请求{n}条数据 成功写入{written}条数据 最新时间为{last_str}",
         flush=True,
     )
-    return written
+    return written, 0
 
 
 def main() -> None:
@@ -198,31 +219,24 @@ def main() -> None:
     # use the last completed hour as the end point
     end_ts = (now_ms // interval) * interval - interval
 
-    db_latest = get_latest_db_ts()
-    if db_latest is None:
-        start_ts = end_ts - interval * 4500
-    else:
-        start_ts = db_latest + interval
-        min_start = end_ts - interval * 4500
-        if start_ts < min_start:
-            start_ts = min_start
-
-    if start_ts > end_ts:
-        print("数据已是最新，无需更新", flush=True)
-        return
-
     symbols = get_symbols_from_db()
     if not symbols:
         print("没有 instrument，请检查 instruments 表。", flush=True)
         sys.exit(1)
 
     total = 0
+    failed = 0
     with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(process_symbol, sym, start_ts, end_ts, tz8) for sym in symbols]
-        for future in as_completed(futures):
-            total += future.result()
+        futures = {executor.submit(process_symbol, sym, end_ts, tz8, interval): sym for sym in symbols}
+        with tqdm(total=len(symbols)) as bar:
+            for fut in as_completed(futures):
+                written, fail = fut.result()
+                total += written
+                failed += fail
+                bar.update(1)
+                bar.set_postfix(written=total, failed=failed)
 
-    print(f"\n总共写入 {total} 条数据", flush=True)
+    print(f"\n总共写入 {total} 条数据，失败 {failed} 个symbol", flush=True)
 
 
 if __name__ == "__main__":
