@@ -105,23 +105,22 @@ def get_symbol_latest_ts(symbol: str) -> int | None:
     return int(row[0]) if row and row[0] is not None else None
 
 
-def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
-    """构造 API 请求 URL"""
+def build_url(symbol: str, end_ts: int) -> str:
+    """构造 API 请求 URL，仅包含 end_time"""
     return (
         f"https://open-api-v4.coinglass.com/api/futures/price/history"
         f"?exchange=Binance"
         f"&symbol={symbol}"
         f"&interval=1h"
         f"&limit={LIMIT}"
-        f"&start_time={start_ts}"
         f"&end_time={end_ts}"
     )
 
 
-def fetch_ohlcv(symbol: str, start_ts: int, end_ts: int):
+def fetch_ohlcv(symbol: str, end_ts: int):
     """拉取指定交易对的 OHLCV，带速率限制和重试"""
 
-    url = build_url(symbol, start_ts, end_ts)
+    url = build_url(symbol, end_ts)
     for attempt in range(3):
         wait_rate_limit()
         try:
@@ -175,24 +174,13 @@ ON CONFLICT(symbol, time) DO NOTHING;
 def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, int]:
     """处理单个交易对：下载并写入数据"""
     latest = get_symbol_latest_ts(symbol)
-    if latest is not None and latest >= end_ts:
-        print(f"{symbol} 数据已是最新，跳过", flush=True)
-        return 0, 0
-
-    if latest is None:
-        start_ts = end_ts - interval * LIMIT
-    else:
-        start_ts = latest + interval
-        min_start = end_ts - interval * LIMIT
-        if start_ts < min_start:
-            start_ts = min_start
-
-    if start_ts > end_ts:
+    expected_last = end_ts - interval
+    if latest is not None and latest >= expected_last:
         print(f"{symbol} 数据已是最新，跳过", flush=True)
         return 0, 0
 
     try:
-        records = fetch_ohlcv(symbol, start_ts, end_ts)
+        records = fetch_ohlcv(symbol, end_ts)
     except Exception as e:
         print(f"{symbol} 请求失败: {e}", flush=True)
         return 0, 1
