@@ -5,7 +5,7 @@ from datetime import datetime, date, time, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
-from utils import safe_rerun
+from utils import safe_rerun, quick_range_buttons
 from sqlalchemy import text
 
 from db import engine_ohlcv
@@ -136,11 +136,22 @@ def render_watchlist_page():
     # ---- 时间区间选择 ----
     col1, col2 = st.columns(2)
     with col1:
-        sd = st.date_input("开始日期", date.today() - timedelta(days=7))
-        stime = st.time_input("开始时间", time(0, 0))
+        sd = st.date_input(
+            "开始日期",
+            date.today() - timedelta(days=7),
+            key="watch_start_date",
+        )
+        stime = st.time_input("开始时间", time(0, 0), key="watch_start_time")
     with col2:
-        ed = st.date_input("结束日期", date.today())
-        etime = st.time_input("结束时间", time(23, 59))
+        ed = st.date_input("结束日期", date.today(), key="watch_end_date")
+        etime = st.time_input("结束时间", time(23, 59), key="watch_end_time")
+
+    quick_range_buttons(
+        "watch_start_date",
+        "watch_start_time",
+        "watch_end_date",
+        "watch_end_time",
+    )
 
     if st.button("计算", key="watch_calc"):
         tz = timezone(timedelta(hours=8))

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 import pandas as pd
 from config import TZ_NAME
@@ -73,3 +73,32 @@ def format_time_col(col: pd.Series) -> pd.Series:
         dt_alt = pd.to_datetime(col, errors="coerce", utc=True)
         dt = dt.fillna(dt_alt).dt.tz_convert("Asia/Shanghai")
     return dt.dt.strftime("%m-%d %H:%M")
+
+
+def quick_range_buttons(
+    start_date_key: str,
+    start_time_key: str,
+    end_date_key: str,
+    end_time_key: str,
+    *,
+    tz_name: str = TZ_NAME,
+) -> None:
+    """Render quick-select buttons for common time ranges.
+
+    When a button is clicked the corresponding start/end date and time values
+    in ``st.session_state`` are updated and the app reruns so that the
+    associated inputs reflect the new values.
+    """
+
+    now = datetime.now(pytz.timezone(tz_name))
+    hours = [1, 4, 12, 24, 72, 168]
+    labels = ["最近1h", "最近4h", "最近12h", "最近24h", "最近72h", "最近一周"]
+    cols = st.columns(len(hours))
+    for col, h, label in zip(cols, hours, labels):
+        if col.button(label, key=f"{start_date_key}_q{h}"):
+            start = now - timedelta(hours=h)
+            st.session_state[start_date_key] = start.date()
+            st.session_state[start_time_key] = start.time().replace(second=0, microsecond=0)
+            st.session_state[end_date_key] = now.date()
+            st.session_state[end_time_key] = now.time().replace(second=0, microsecond=0)
+            safe_rerun()

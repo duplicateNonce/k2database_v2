@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date, time, timedelta, timezone as dt_timezone
 from sqlalchemy import text
 
-from utils import safe_rerun
+from utils import safe_rerun, quick_range_buttons
 
 from db import engine_ohlcv
 from config import TZ_NAME
@@ -96,11 +96,22 @@ def render_monitor():
 
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("开始日期", date.today() - timedelta(days=7))
-        start_time = st.time_input("开始时间", time(0, 0))
+        start_date = st.date_input(
+            "开始日期",
+            date.today() - timedelta(days=7),
+            key="monitor_start_date",
+        )
+        start_time = st.time_input("开始时间", time(0, 0), key="monitor_start_time")
     with col2:
-        end_date = st.date_input("结束日期", date.today())
-        end_time = st.time_input("结束时间", time(23, 59))
+        end_date = st.date_input("结束日期", date.today(), key="monitor_end_date")
+        end_time = st.time_input("结束时间", time(23, 59), key="monitor_end_time")
+
+    quick_range_buttons(
+        "monitor_start_date",
+        "monitor_start_time",
+        "monitor_end_date",
+        "monitor_end_time",
+    )
 
     if st.button("计算并保存 P1", disabled=locked):
         tz = dt_timezone(timedelta(hours=8))

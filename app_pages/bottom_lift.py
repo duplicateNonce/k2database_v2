@@ -5,7 +5,12 @@ from db import engine_ohlcv
 from strategies.bottom_lift import analyze_bottom_lift
 import pandas as pd
 from query_history import add_entry, get_history
-from utils import safe_rerun, short_time_range, update_shared_range
+from utils import (
+    safe_rerun,
+    short_time_range,
+    update_shared_range,
+    quick_range_buttons,
+)
 from result_cache import load_cached, save_cached
 
 
@@ -97,6 +102,8 @@ def render_bottom_lift_page():
             ),
             key="t2_time",
         )
+
+    quick_range_buttons("t1_date", "t1_time", "t2_date", "t2_time")
 
     # 可调参数：bars (窗口大小) 和 factor (放大因子)
     bars = st.number_input("± N 根 K 线 (bars)", min_value=1, value=4, step=1)

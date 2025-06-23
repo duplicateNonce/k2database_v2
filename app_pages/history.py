@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, timedelta, time
 from db import engine_coin
 from queries import fetch_coinmarkets_history, fetch_instruments
+from utils import quick_range_buttons
 
 def render_history():
     st.header("历史数据查询")
@@ -12,6 +13,13 @@ def render_history():
     start_time = st.time_input("开始时间", time(0, 0), key="hist_start_time")
     end_date   = st.date_input("结束日期", datetime.now(), key="hist_end_date")
     end_time   = st.time_input("结束时间", time(23, 59), key="hist_end_time")
+
+    quick_range_buttons(
+        "hist_start_date",
+        "hist_start_time",
+        "hist_end_date",
+        "hist_end_time",
+    )
 
     if st.button("查询", key="hist_btn"):
         # combine date + time → datetime

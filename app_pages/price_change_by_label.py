@@ -11,7 +11,7 @@ from db import engine_ohlcv
 import psycopg2
 from dotenv import load_dotenv
 from config import secret_get
-from utils import safe_rerun, short_time_range
+from utils import safe_rerun, short_time_range, quick_range_buttons
 from query_history import add_entry, get_history
 from result_cache import load_cached, save_cached
 
@@ -116,17 +116,27 @@ def render_price_change_by_label():
         sd = st.date_input(
             "开始日期",
             sd or (now.date() - timedelta(hours=4)),
+            key="pcl_start_date",
         )
         stime = st.time_input(
             "开始时间",
             stime or time(now.hour, now.minute),
+            key="pcl_start_time",
         )
     with c2:
-        ed = st.date_input("结束日期", ed or now.date())
+        ed = st.date_input("结束日期", ed or now.date(), key="pcl_end_date")
         etime = st.time_input(
             "结束时间",
             etime or time(now.hour, now.minute),
+            key="pcl_end_time",
         )
+
+    quick_range_buttons(
+        "pcl_start_date",
+        "pcl_start_time",
+        "pcl_end_date",
+        "pcl_end_time",
+    )
     start_dt = datetime(sd.year, sd.month, sd.day, stime.hour, stime.minute, tzinfo=timezone.utc)
     end_dt   = datetime(ed.year, ed.month, ed.day, etime.hour, etime.minute, tzinfo=timezone.utc)
     start_custom_ts = int(start_dt.timestamp()*1000)
