@@ -44,7 +44,7 @@ def fetch_instruments(engine):
 def fetch_ohlcv(engine, symbol, start_ts, end_ts):
     return pd.read_sql(
         text(
-            "SELECT * FROM ohlcv WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
+            "SELECT * FROM ohlcv_1h WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
         ),
         engine,
         params={"symbol": symbol, "start": start_ts, "end": end_ts},
@@ -52,5 +52,5 @@ def fetch_ohlcv(engine, symbol, start_ts, end_ts):
 
 
 def fetch_distinct_ohlcv_symbols(engine) -> list[str]:
-    df = pd.read_sql("SELECT DISTINCT symbol FROM ohlcv", engine)
+    df = pd.read_sql("SELECT DISTINCT symbol FROM ohlcv_1h", engine)
     return df["symbol"].tolist()

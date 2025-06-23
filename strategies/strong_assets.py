@@ -16,7 +16,7 @@ def compute_period_metrics(symbol: str,
     with engine_ohlcv.connect() as conn:
         df = pd.read_sql(text("""
             SELECT time, close
-            FROM ohlcv
+            FROM ohlcv_1h
             WHERE symbol = :symbol
               AND time BETWEEN :start AND :end
             ORDER BY time

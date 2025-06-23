@@ -112,7 +112,7 @@ def render_watchlist_page():
     # ---- 管理自选列表 ----
     with st.expander("管理自选标的", expanded=False):
         with engine_ohlcv.connect() as conn:
-            syms = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv"))]
+            syms = [row[0] for row in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
         add_sym = st.selectbox("添加标的", [s for s in syms if s not in watchlist])
         if st.button("添加"):
             if add_sym and add_sym not in watchlist:
@@ -154,7 +154,7 @@ def render_watchlist_page():
         for sym in watchlist:
             df = pd.read_sql(
                 text(
-                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv "
+                    "SELECT time, open, high, low, close, volume_usd FROM ohlcv_1h "
                     "WHERE symbol=:sym AND time BETWEEN :a AND :b ORDER BY time"
                 ),
                 engine_ohlcv,
