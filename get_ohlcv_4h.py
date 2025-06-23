@@ -10,6 +10,9 @@ from config import secret_get
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
+# 最后一次 API 请求时间，用于速率限制
+LAST_REQ = 0.0
+
 # 加载环境变量并校验
 load_dotenv()
 API_KEY = secret_get("CG_API_KEY")
@@ -74,14 +77,36 @@ def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
     )
 
 
+def is_up_to_date(symbol: str, target_ts: int) -> bool:
+    """检查 symbol 的最新时间戳是否不小于 target_ts"""
+    conn = psycopg2.connect(**DB_CFG)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT time FROM ohlcv_4h WHERE symbol=%s ORDER BY time DESC LIMIT 1",
+        (symbol,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return bool(row) and int(row[0]) >= target_ts
+
+
 def fetch_ohlcv(symbol: str, start_ts: int, end_ts: int):
     """拉取指定交易对的 OHLCV"""
+    global LAST_REQ
+
+    now = time.time()
+    wait = 1.0 - (now - LAST_REQ)
+    if wait > 0:
+        time.sleep(wait)
+
     url = build_url(symbol, start_ts, end_ts)
     resp = requests.get(
         url,
         headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
         timeout=30,
     )
+    LAST_REQ = time.time()
     data = resp.json()
     if data.get("code") != "0":
         raise RuntimeError(data.get("msg"))
@@ -121,6 +146,9 @@ ON CONFLICT(symbol, time) DO NOTHING;
 
 def process_symbol(symbol: str, start_ts: int, end_ts: int, tz8) -> int:
     """处理单个交易对：下载并写入数据"""
+    if is_up_to_date(symbol, end_ts):
+        print(f"{symbol} 数据已是最新，跳过", flush=True)
+        return 0
     try:
         records = fetch_ohlcv(symbol, start_ts, end_ts)
     except Exception as e:
@@ -153,10 +181,8 @@ def main() -> None:
         sys.exit(1)
 
     total = 0
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = [executor.submit(process_symbol, sym, start_ts, end_ts, tz8) for sym in symbols]
-        for future in as_completed(futures):
-            total += future.result()
+    for sym in symbols:
+        total += process_symbol(sym, start_ts, end_ts, tz8)
 
     print(f"\n总共写入 {total} 条数据", flush=True)
 
