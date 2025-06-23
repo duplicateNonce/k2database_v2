@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import threading
 import requests
 import psycopg2
 from datetime import datetime, timezone, timedelta
@@ -12,6 +13,8 @@ from decimal import Decimal
 
 # 最后一次 API 请求时间，用于速率限制
 LAST_REQ = 0.0
+# 锁，确保多线程环境下的速率限制
+REQ_LOCK = threading.Lock()
 
 # 加载环境变量并校验
 load_dotenv()
@@ -103,33 +106,40 @@ def is_up_to_date(symbol: str, target_ts: int) -> bool:
 
 
 def fetch_ohlcv(symbol: str, start_ts: int, end_ts: int):
-    """拉取指定交易对的 OHLCV"""
+    """拉取指定交易对的 OHLCV，包含简单重试和速率限制"""
     global LAST_REQ
 
-    now = time.time()
-    wait = 1.0 - (now - LAST_REQ)
-    if wait > 0:
-        time.sleep(wait)
-
     url = build_url(symbol, start_ts, end_ts)
-    resp = requests.get(
-        url,
-        headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
-        timeout=30,
-    )
-    LAST_REQ = time.time()
-    data = resp.json()
-    if data.get("code") != "0":
-        raise RuntimeError(data.get("msg"))
-    return [(
-        symbol,
-        int(item["time"]),
-        Decimal(item["open"]),
-        Decimal(item["high"]),
-        Decimal(item["low"]),
-        Decimal(item["close"]),
-        Decimal(item["volume_usd"]),
-    ) for item in data.get("data", [])]
+    for attempt in range(3):
+        with REQ_LOCK:
+            now = time.time()
+            wait = 1.0 - (now - LAST_REQ)
+            if wait > 0:
+                time.sleep(wait)
+            LAST_REQ = time.time()
+        try:
+            resp = requests.get(
+                url,
+                headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
+                timeout=30,
+            )
+            data = resp.json()
+            if data.get("code") != "0":
+                raise RuntimeError(data.get("msg"))
+            return [(
+                symbol,
+                int(item["time"]),
+                Decimal(item["open"]),
+                Decimal(item["high"]),
+                Decimal(item["low"]),
+                Decimal(item["close"]),
+                Decimal(item["volume_usd"]),
+            ) for item in data.get("data", [])]
+        except Exception as exc:
+            if attempt == 2:
+                raise
+            print(f"{symbol} 请求失败尝试重试: {exc}", flush=True)
+            time.sleep(1)
 
 
 def insert_data(records) -> int:
@@ -195,8 +205,10 @@ def main() -> None:
         sys.exit(1)
 
     total = 0
-    for sym in symbols:
-        total += process_symbol(sym, start_ts, end_ts, tz8)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(process_symbol, sym, start_ts, end_ts, tz8) for sym in symbols]
+        for fut in as_completed(futures):
+            total += fut.result()
 
     print(f"\n总共写入 {total} 条数据", flush=True)
 
