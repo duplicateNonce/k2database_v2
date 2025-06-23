@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import sys
+import time
+import threading
 import requests
 import psycopg2
 from datetime import datetime, timezone, timedelta
@@ -7,6 +9,11 @@ from dotenv import load_dotenv
 from config import secret_get
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
+
+# 最后一次 API 请求时间，用于速率限制
+LAST_REQ = 0.0
+# 锁，确保多线程速率限制
+REQ_LOCK = threading.Lock()
 
 # 加载环境变量并校验
 load_dotenv()
@@ -59,6 +66,31 @@ def get_symbols_from_db():
     return symbols
 
 
+def get_latest_db_ts() -> int | None:
+    """Return the newest ``time`` across all records or ``None`` when empty."""
+    conn = psycopg2.connect(**DB_CFG)
+    cur = conn.cursor()
+    cur.execute("SELECT MAX(time) FROM ohlcv_1h")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else None
+
+
+def is_up_to_date(symbol: str, target_ts: int) -> bool:
+    """检查 symbol 的最新时间戳是否不小于 target_ts"""
+    conn = psycopg2.connect(**DB_CFG)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT time FROM ohlcv_1h WHERE symbol=%s ORDER BY time DESC LIMIT 1",
+        (symbol,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return bool(row) and int(row[0]) >= target_ts
+
+
 def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
     """构造 API 请求 URL"""
     return (
@@ -73,25 +105,40 @@ def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
 
 
 def fetch_ohlcv(symbol: str, start_ts: int, end_ts: int):
-    """拉取指定交易对的 OHLCV"""
+    """拉取指定交易对的 OHLCV，带速率限制和重试"""
+    global LAST_REQ
+
     url = build_url(symbol, start_ts, end_ts)
-    resp = requests.get(
-        url,
-        headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
-        timeout=30,
-    )
-    data = resp.json()
-    if data.get("code") != "0":
-        raise RuntimeError(data.get("msg"))
-    return [(
-        symbol,
-        int(item["time"]),
-        Decimal(item["open"]),
-        Decimal(item["high"]),
-        Decimal(item["low"]),
-        Decimal(item["close"]),
-        Decimal(item["volume_usd"]),
-    ) for item in data.get("data", [])]
+    for attempt in range(3):
+        with REQ_LOCK:
+            now = time.time()
+            wait = 1.0 - (now - LAST_REQ)
+            if wait > 0:
+                time.sleep(wait)
+            LAST_REQ = time.time()
+        try:
+            resp = requests.get(
+                url,
+                headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
+                timeout=30,
+            )
+            data = resp.json()
+            if data.get("code") != "0":
+                raise RuntimeError(data.get("msg"))
+            return [(
+                symbol,
+                int(item["time"]),
+                Decimal(item["open"]),
+                Decimal(item["high"]),
+                Decimal(item["low"]),
+                Decimal(item["close"]),
+                Decimal(item["volume_usd"]),
+            ) for item in data.get("data", [])]
+        except Exception as exc:
+            if attempt == 2:
+                raise
+            print(f"{symbol} 请求失败尝试重试: {exc}", flush=True)
+            time.sleep(1)
 
 
 def insert_data(records) -> int:
@@ -119,6 +166,9 @@ ON CONFLICT(symbol, time) DO NOTHING;
 
 def process_symbol(symbol: str, start_ts: int, end_ts: int, tz8) -> int:
     """处理单个交易对：下载并写入数据"""
+    if is_up_to_date(symbol, end_ts):
+        print(f"{symbol} 数据已是最新，跳过", flush=True)
+        return 0
     try:
         records = fetch_ohlcv(symbol, start_ts, end_ts)
     except Exception as e:
@@ -146,6 +196,9 @@ def main() -> None:
     interval = 3600 * 1000
     now = int(datetime.now(timezone.utc).timestamp() * 1000)
     end_ts = (now // interval) * interval
+    db_latest = get_latest_db_ts()
+    if db_latest is not None and db_latest < end_ts:
+        end_ts = db_latest
     start_ts = end_ts - interval * 4500
 
     symbols = get_symbols_from_db()
