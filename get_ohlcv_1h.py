@@ -194,12 +194,22 @@ def main() -> None:
     tz8 = timezone(timedelta(hours=8))
     # 计算时间段，按1小时对齐
     interval = 3600 * 1000
-    now = int(datetime.now(timezone.utc).timestamp() * 1000)
-    end_ts = (now // interval) * interval
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    # use the last completed hour as the end point
+    end_ts = (now_ms // interval) * interval - interval
+
     db_latest = get_latest_db_ts()
-    if db_latest is not None and db_latest < end_ts:
-        end_ts = db_latest
-    start_ts = end_ts - interval * 4500
+    if db_latest is None:
+        start_ts = end_ts - interval * 4500
+    else:
+        start_ts = db_latest + interval
+        min_start = end_ts - interval * 4500
+        if start_ts < min_start:
+            start_ts = min_start
+
+    if start_ts > end_ts:
+        print("数据已是最新，无需更新", flush=True)
+        return
 
     symbols = get_symbols_from_db()
     if not symbols:
