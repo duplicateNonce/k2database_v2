@@ -17,7 +17,7 @@ MAX_REQS_PER_MIN = 79
 REQ_LOCK = threading.Lock()
 
 # API request limit
-LIMIT = 4500
+LIMIT =2000
 
 # 加载环境变量并校验
 load_dotenv()
