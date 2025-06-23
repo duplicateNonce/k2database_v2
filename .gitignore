@@ -9,3 +9,4 @@ prompt/prompts.json
 prompt/localprompt_cache.json
 .tgaisum_started
 testprompt.log
+*.log
