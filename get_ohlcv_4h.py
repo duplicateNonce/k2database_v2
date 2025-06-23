@@ -64,6 +64,17 @@ def get_symbols_from_db():
     return symbols
 
 
+def get_latest_db_ts() -> int | None:
+    """Return the newest ``time`` across all records or ``None`` when empty."""
+    conn = psycopg2.connect(**DB_CFG)
+    cur = conn.cursor()
+    cur.execute("SELECT MAX(time) FROM ohlcv_4h")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else None
+
+
 def build_url(symbol: str, start_ts: int, end_ts: int) -> str:
     """构造 API 请求 URL"""
     return (
@@ -173,6 +184,9 @@ def main() -> None:
     interval = 4 * 3600 * 1000
     now = int(datetime.now(timezone.utc).timestamp() * 1000)
     end_ts = (now // interval) * interval
+    db_latest = get_latest_db_ts()
+    if db_latest is not None and db_latest < end_ts:
+        end_ts = db_latest
     start_ts = end_ts - interval * 4500
 
     symbols = get_symbols_from_db()
