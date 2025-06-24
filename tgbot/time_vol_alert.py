@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import argparse
 import os
 import sys
@@ -15,7 +15,7 @@ from sqlalchemy import text
 import pytz
 
 from db import engine_ohlcv
-from monitor_bot import send_message
+from monitor_bot import ascii_table, send_message
 from config import TZ_NAME
 
 
@@ -33,27 +33,27 @@ def parse_args() -> argparse.Namespace:
         "--window",
         type=int,
         default=720,
-        help="Look-back window in hours",
+        help="Look-back window in hours for rolling average",
     )
     parser.add_argument(
-        "--quantile",
-        type=float,
-        default=0.95,
-        help="Quantile threshold",
+        "--top",
+        type=int,
+        default=20,
+        help="Number of results to show",
     )
     return parser.parse_args()
 
 
-def latest_volume(symbol: str) -> tuple[int, float] | tuple[None, None]:
-    """Return ``(time, volume)`` of the newest record for ``symbol``."""
+def hour_volume(symbol: str, ts: int) -> float | None:
+    """Return the hourly volume for ``symbol`` at ``ts``."""
     sql = text(
-        "SELECT time, volume_usd AS volume FROM ohlcv_1h "
-        "WHERE symbol=:sym ORDER BY time DESC LIMIT 1"
+        "SELECT volume_usd AS volume FROM ohlcv_1h "
+        "WHERE symbol=:sym AND time=:t"
     )
-    df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
+    df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol, "t": ts})
     if df.empty:
-        return None, None
-    return int(df.loc[0, "time"]), float(df.loc[0, "volume"])
+        return None
+    return float(df.loc[0, "volume"])
 
 
 def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
@@ -70,77 +70,66 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     return df["volume"]
 
 
-def last_volumes(symbol: str, count: int = 4) -> pd.DataFrame:
-    """Return the last ``count`` hourly volumes for ``symbol`` sorted by time."""
-    sql = text(
-        f"SELECT time, volume_usd AS volume FROM ohlcv_1h "
-        f"WHERE symbol=:sym ORDER BY time DESC LIMIT {int(count)}"
-    )
-    df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
-    return df.sort_values("time")
-
-
-def check_symbol(symbol: str, window: int, quantile: float) -> list[str]:
-    """Check ``symbol`` for volume anomalies and return alert messages."""
-    df_latest = last_volumes(symbol, 4)
-    if df_latest.empty:
-        print(f"No data for {symbol}")
-        return []
-
-    earliest = int(df_latest["time"].min())
-    hist_end = earliest - 1
-    start_ts = hist_end - window * 3600 * 1000
-    vols = history_volumes(symbol, start_ts, hist_end)
+def volume_deviation(symbol: str, ts: int, window: int) -> float | None:
+    """Return percentage difference to ``window`` hour mean for ``symbol``."""
+    vol = hour_volume(symbol, ts)
+    if vol is None:
+        return None
+    start_ts = ts - window * 3600 * 1000
+    vols = history_volumes(symbol, start_ts, ts - 1)
     if vols.empty:
-        print(f"Not enough history for {symbol}")
-        return []
+        return None
+    mean_vol = vols.mean()
+    if not mean_vol:
+        return None
+    return (vol - mean_vol) / mean_vol * 100
 
-    threshold = vols.quantile(quantile)
 
-    def percentile_rank(v: float) -> float:
-        """Return the percentile rank of ``v`` within ``vols``."""
-        return pd.concat([vols, pd.Series([v])]).rank(pct=True).iloc[-1] * 100
-
+def last_hour_label() -> tuple[int, str]:
+    """Return timestamp (ms) of the last full hour and a label."""
     tz = pytz.timezone(TZ_NAME)
-    alerts = []
-    report_rows = []
-    for row in df_latest.itertuples(index=False):
-        ts_str = datetime.fromtimestamp(row.time / 1000, tz).strftime("%Y-%m-%d %H:%M")
-        pct = percentile_rank(row.volume)
-        report_rows.append((ts_str, pct))
-        if row.volume > threshold:
-            alerts.append(
-                f"[{ts_str}] {symbol} 成交量异动：当前 {row.volume:.0f} > "
-                f"{quantile * 100:.0f}% 分位 {threshold:.0f}"
-            )
-
-    print(f"Symbol: {symbol}")
-    print("Last 4 periods and percentile ranks:")
-    for ts_str, pct in report_rows:
-        print(f"{ts_str} -> {pct:.2f}%")
-
-    return alerts
+    now_ts = int(datetime.now(tz).timestamp())
+    end_dt = datetime.fromtimestamp((now_ts // 3600) * 3600, tz)
+    start_dt = end_dt - timedelta(hours=1)
+    label = f"{start_dt.strftime('%Y.%m.%d %H:%M')}-{end_dt.strftime('%H:%M')}"
+    return int(start_dt.timestamp() * 1000), label
 
 
 def main() -> None:
     args = parse_args()
 
+    start_ts, label = last_hour_label()
     with engine_ohlcv.begin() as conn:
         if args.symbol:
             symbols = [args.symbol]
         else:
             symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
+        label_map = {r[0]: r[1] for r in conn.execute(text("SELECT instrument_id, labels FROM instruments"))}
 
-    all_alerts: list[str] = []
+    records = []
     for sym in symbols:
-        alerts = check_symbol(sym, args.window, args.quantile)
-        all_alerts.extend(alerts)
+        pct = volume_deviation(sym, start_ts, args.window)
+        if pct is None:
+            continue
+        records.append({"symbol": sym, "pct": pct})
 
-    if all_alerts:
-        for msg in all_alerts:
-            send_message(msg)
-    else:
-        print("当前4h内Binance场内无交易量异动")
+    if not records:
+        print("No data for the specified period")
+        return
+
+    df = pd.DataFrame(records)
+    df["标签"] = df["symbol"].map(lambda s: "，".join(label_map.get(s, [])) if label_map.get(s) else "")
+    df["差异"] = df["pct"].map(lambda x: f"{x:.2f}%")
+    df = df.sort_values("pct", ascending=False).reset_index(drop=True)
+    df = df.head(args.top)
+    df["symbol"] = df["symbol"].str.replace("USDT", "")
+    df = df[["标签", "symbol", "差异"]].rename(columns={"symbol": "代币名字"})
+
+    table = ascii_table(df)
+    header = f"{label} 成交量异动"
+    print(header)
+    print(table)
+    send_message(f"{header}\n```\n{table}\n```", parse_mode="Markdown")
 
 
 if __name__ == "__main__":
