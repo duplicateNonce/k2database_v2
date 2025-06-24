@@ -44,21 +44,14 @@ def _display_width(text: str) -> int:
 
 
 def ascii_table(df: pd.DataFrame) -> str:
-    """Return comma separated lines for ``df``.
-
-    The first line contains the headers, followed by one line per row in the
-    same comma separated format. This format is easier to read on small
-    screens compared to an ASCII table.
-    """
+    """Return ``df`` formatted as ``label : token : gain`` lines."""
 
     if df.empty:
         return ""
 
-    headers = list(df.columns)
     rows = df.astype(str).values.tolist()
 
-    lines = [", ".join(headers)]
-    lines.extend(", ".join(r) for r in rows)
+    lines = [f"{r[0]} : {r[1]} : {r[2]}" for r in rows]
     return "\n".join(lines)
 
 
