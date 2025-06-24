@@ -43,21 +43,21 @@ def parse_args() -> argparse.Namespace:
 
 
 def latest_volume(symbol: str) -> tuple[int, float] | tuple[None, None]:
-    """Return ``(time, volume_usd)`` of the newest record for ``symbol``."""
+    """Return ``(time, volume)`` of the newest record for ``symbol``."""
     sql = text(
-        "SELECT time, volume_usd FROM ohlcv_1h "
+        "SELECT time, volume FROM ohlcv_1h "
         "WHERE symbol=:sym ORDER BY time DESC LIMIT 1"
     )
     df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
     if df.empty:
         return None, None
-    return int(df.loc[0, "time"]), float(df.loc[0, "volume_usd"])
+    return int(df.loc[0, "time"]), float(df.loc[0, "volume"])
 
 
 def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     """Return historical volumes for ``symbol`` between ``start_ts`` and ``end_ts``."""
     sql = text(
-        "SELECT volume_usd FROM ohlcv_1h "
+        "SELECT volume FROM ohlcv_1h "
         "WHERE symbol=:sym AND time BETWEEN :start AND :end"
     )
     df = pd.read_sql(
@@ -65,13 +65,13 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
         engine_ohlcv,
         params={"sym": symbol, "start": start_ts, "end": end_ts},
     )
-    return df["volume_usd"]
+    return df["volume"]
 
 
 def last_volumes(symbol: str, count: int = 4) -> pd.DataFrame:
     """Return the last ``count`` hourly volumes for ``symbol`` sorted by time."""
     sql = text(
-        f"SELECT time, volume_usd FROM ohlcv_1h "
+        f"SELECT time, volume FROM ohlcv_1h "
         f"WHERE symbol=:sym ORDER BY time DESC LIMIT {int(count)}"
     )
     df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
@@ -86,9 +86,10 @@ def main() -> None:
         print("No data for symbol")
         return
 
-    end_ts = int(df_latest["time"].max())
-    start_ts = end_ts - args.window * 3600 * 1000
-    vols = history_volumes(args.symbol, start_ts, end_ts - 1)
+    earliest = int(df_latest["time"].min())
+    hist_end = earliest - 1
+    start_ts = hist_end - args.window * 3600 * 1000
+    vols = history_volumes(args.symbol, start_ts, hist_end)
     if vols.empty:
         print("Not enough history")
         return
@@ -98,12 +99,12 @@ def main() -> None:
     tz = pytz.timezone(TZ_NAME)
     alerts = []
     for row in df_latest.itertuples(index=False):
-        if row.volume_usd > threshold:
+        if row.volume > threshold:
             ts_str = datetime.fromtimestamp(row.time / 1000, tz).strftime(
                 "%Y-%m-%d %H:%M"
             )
             alerts.append(
-                f"[{ts_str}] {args.symbol} 成交量异动：当前 {row.volume_usd:.0f} > "
+                f"[{ts_str}] {args.symbol} 成交量异动：当前 {row.volume:.0f} > "
                 f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
             )
 

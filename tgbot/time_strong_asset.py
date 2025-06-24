@@ -23,7 +23,7 @@ def last_4h_range() -> tuple[int, int, str]:
     now_ts = int(datetime.now(tz).timestamp())
     end_dt = datetime.fromtimestamp(((now_ts // 3600) - 1) * 3600, tz)
     start_dt = end_dt - timedelta(hours=3)
-    label = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
+    label = f"{start_dt.strftime('%H:%M')}-{(end_dt + timedelta(hours=1)).strftime('%H:%M')}"
     return int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000), label
 
 
