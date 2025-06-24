@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
 def latest_volume(symbol: str) -> tuple[int, float] | tuple[None, None]:
     """Return ``(time, volume)`` of the newest record for ``symbol``."""
     sql = text(
-        "SELECT time, volume FROM ohlcv_1h "
+        "SELECT time, volume_usd AS volume FROM ohlcv_1h "
         "WHERE symbol=:sym ORDER BY time DESC LIMIT 1"
     )
     df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
@@ -57,7 +57,7 @@ def latest_volume(symbol: str) -> tuple[int, float] | tuple[None, None]:
 def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     """Return historical volumes for ``symbol`` between ``start_ts`` and ``end_ts``."""
     sql = text(
-        "SELECT volume FROM ohlcv_1h "
+        "SELECT volume_usd AS volume FROM ohlcv_1h "
         "WHERE symbol=:sym AND time BETWEEN :start AND :end"
     )
     df = pd.read_sql(
@@ -71,7 +71,7 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
 def last_volumes(symbol: str, count: int = 4) -> pd.DataFrame:
     """Return the last ``count`` hourly volumes for ``symbol`` sorted by time."""
     sql = text(
-        f"SELECT time, volume FROM ohlcv_1h "
+        f"SELECT time, volume_usd AS volume FROM ohlcv_1h "
         f"WHERE symbol=:sym ORDER BY time DESC LIMIT {int(count)}"
     )
     df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
