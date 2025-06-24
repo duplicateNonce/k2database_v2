@@ -43,6 +43,7 @@ def main() -> None:
         records.append(m)
 
     if not records:
+        print("No data for the specified period")
         return
 
     df = pd.DataFrame(records)
@@ -55,6 +56,12 @@ def main() -> None:
 
     table = ascii_table(df)
     header = f"最近4h（{label}）强势标的"
+
+    # Print to console so manual runs have visible output
+    print(header)
+    print(table)
+
+    # Send to Telegram if credentials are configured
     send_message(f"{header}\n```\n{table}\n```")
 
 
