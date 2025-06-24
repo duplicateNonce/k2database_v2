@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check hourly trading volume and notify Telegram on anomalies."""
+"""Check hourly trading volume against a 144 day rolling average."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from sqlalchemy import text
 import pytz
 
 from db import engine_ohlcv
-from monitor_bot import ascii_table, send_message
+from monitor_bot import send_message
+from test1hstrong import format_ascii_table
 from config import TZ_NAME
 
 
@@ -32,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--window",
         type=int,
-        default=720,
+        default=144 * 24,
         help="Look-back window in hours for rolling average",
     )
     parser.add_argument(
@@ -104,7 +105,6 @@ def main() -> None:
             symbols = [args.symbol]
         else:
             symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
-        label_map = {r[0]: r[1] for r in conn.execute(text("SELECT instrument_id, labels FROM instruments"))}
 
     records = []
     for sym in symbols:
@@ -118,15 +118,14 @@ def main() -> None:
         return
 
     df = pd.DataFrame(records)
-    df["标签"] = df["symbol"].map(lambda s: "，".join(label_map.get(s, [])) if label_map.get(s) else "")
     df["差异"] = df["pct"].map(lambda x: f"{x:.2f}%")
     df = df.sort_values("pct", ascending=False).reset_index(drop=True)
     df = df.head(args.top)
     df["symbol"] = df["symbol"].str.replace("USDT", "")
-    df = df[["标签", "symbol", "差异"]].rename(columns={"symbol": "代币名字"})
+    df = df[["symbol", "差异"]].rename(columns={"symbol": "代币名字"})
 
-    table = ascii_table(df)
-    header = f"{label} 成交量异动"
+    table = format_ascii_table(df)
+    header = f"{label} 成交量异动 (144天均量)"
     print(header)
     print(table)
     send_message(f"{header}\n```\n{table}\n```", parse_mode="Markdown")
