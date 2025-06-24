@@ -50,6 +50,8 @@ def main() -> None:
     df["标签"] = df["symbol"].map(lambda s: "，".join(label_map.get(s, [])) if label_map.get(s) else "")
     df["期间收益"] = (df["period_return"] * 100).map(lambda x: f"{x:.2f}%")
     df = df.sort_values("period_return", ascending=False).reset_index(drop=True)
+    # Only keep the top 10 assets to avoid overly long Telegram messages
+    df = df.head(10)
     df["symbol"] = df["symbol"].str.replace("USDT", "")
     df = df[["标签", "symbol", "期间收益"]]
     df = df.rename(columns={"symbol": "代币名字"})
