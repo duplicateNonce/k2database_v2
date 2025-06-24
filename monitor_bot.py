@@ -44,13 +44,21 @@ def ensure_table():
         conn.execute(text(sql2))
 
 
-def send_message(text_msg: str, chat_id: str | int | None = None) -> None:
+def send_message(
+    text_msg: str, chat_id: str | int | None = None, parse_mode: str | None = None
+) -> None:
+    """Send ``text_msg`` to Telegram using an optional parse mode."""
+
     token = TELEGRAM_BOT_TOKEN
     cid = chat_id or TELEGRAM_CHAT_ID
     if not token or not cid:
         return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": cid, "text": text_msg}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+
     try:
         requests.post(url, json=payload, timeout=10, proxies=get_proxy_dict())
     except Exception as e:
@@ -186,7 +194,7 @@ def check_prices() -> None:
             rows.sort(key=lambda x: float(x["差值%"].rstrip("%")), reverse=True)
             df_table = pd.DataFrame(rows)
             msg = "```\n" + ascii_table(df_table) + "\n```"
-            send_message(msg)
+            send_message(msg, parse_mode="Markdown")
 
 
 def ba_command(chat_id: int) -> None:
@@ -245,7 +253,7 @@ def ba_command(chat_id: int) -> None:
                 ]
             )
             msg = "```\n" + ascii_table(table) + "\n```"
-            send_message(msg, chat_id)
+            send_message(msg, chat_id, parse_mode="Markdown")
     except Exception as exc:
         send_message(f"/ba 执行失败: {exc}", chat_id)
 
@@ -304,7 +312,7 @@ def rsi_command(chat_id: int) -> None:
             )
         df_t = pd.DataFrame(table, columns=["symbol", "RSI(4h)", "现价", "4h涨跌幅"])
         msg = "```\n" + ascii_table(df_t) + "\n```"
-        send_message(msg, chat_id)
+        send_message(msg, chat_id, parse_mode="Markdown")
     except Exception as exc:
         send_message(f"/rsi 执行失败: {exc}", chat_id)
 
@@ -526,7 +534,7 @@ def four_hour_command(chat_id: int) -> None:
             columns=["symbol", "count", "累计涨幅"],
         )
         msg = "```\n" + ascii_table(table) + "\n```"
-        send_message(msg, chat_id)
+        send_message(msg, chat_id, parse_mode="Markdown")
 
 
 def fetch_updates(offset: int) -> list[dict]:
