@@ -90,17 +90,25 @@ def quick_range_buttons(
     associated inputs reflect the new values.
     """
 
-    now = datetime.now(pytz.timezone(tz_name))
+    tz = pytz.timezone(tz_name)
+    now = datetime.now(tz)
     hours = [1, 4, 12, 24, 72, 168]
     labels = ["最近1h", "最近4h", "最近12h", "最近24h", "最近72h", "最近一周"]
     cols = st.columns(len(hours))
+
     def set_range(hours: int) -> None:
         """Callback to update the time range and trigger a rerun."""
-        start = now - timedelta(hours=hours)
+        # Align end time to the last completed ``hours`` interval
+        now_ts = int(now.timestamp())
+        interval = hours * 3600
+        end_ts = (now_ts // interval) * interval
+        end = datetime.fromtimestamp(end_ts, tz)
+        start = end - timedelta(hours=hours)
+
         st.session_state[start_date_key] = start.date()
         st.session_state[start_time_key] = start.time().replace(second=0, microsecond=0)
-        st.session_state[end_date_key] = now.date()
-        st.session_state[end_time_key] = now.time().replace(second=0, microsecond=0)
+        st.session_state[end_date_key] = end.date()
+        st.session_state[end_time_key] = end.time().replace(second=0, microsecond=0)
         safe_rerun()
 
     for col, h, label in zip(cols, hours, labels):
