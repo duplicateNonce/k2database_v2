@@ -98,10 +98,11 @@ def quick_range_buttons(
 
     def set_range(hours: int) -> None:
         """Callback to update the time range and trigger a rerun."""
-        # Align end time to the last completed ``hours`` interval
-        now_ts = int(now.timestamp())
-        interval = hours * 3600
-        end_ts = (now_ts // interval) * interval
+        # Data is stored in hourly granularity.  Always align the end
+        # time to the most recent completed hour regardless of the
+        # selected range length.
+        now_ts = int(datetime.now(tz).timestamp())
+        end_ts = (now_ts // 3600) * 3600
         end = datetime.fromtimestamp(end_ts, tz)
         start = end - timedelta(hours=hours)
 
