@@ -102,9 +102,12 @@ def quick_range_buttons(
         # time to the most recent completed hour regardless of the
         # selected range length.
         now_ts = int(datetime.now(tz).timestamp())
-        end_ts = (now_ts // 3600) * 3600
+        # use the last completed hour as end time since each candle's
+        # timestamp marks the start of that hour
+        end_ts = ((now_ts // 3600) - 1) * 3600
         end = datetime.fromtimestamp(end_ts, tz)
-        start = end - timedelta(hours=hours)
+        # include ``hours`` candles ending at ``end`` (inclusive)
+        start = end - timedelta(hours=hours - 1)
 
         st.session_state[start_date_key] = start.date()
         st.session_state[start_time_key] = start.time().replace(second=0, microsecond=0)
