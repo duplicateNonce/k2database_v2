@@ -68,14 +68,25 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     return df["volume_usd"]
 
 
+def last_volumes(symbol: str, count: int = 4) -> pd.DataFrame:
+    """Return the last ``count`` hourly volumes for ``symbol`` sorted by time."""
+    sql = text(
+        f"SELECT time, volume_usd FROM ohlcv_1h "
+        f"WHERE symbol=:sym ORDER BY time DESC LIMIT {int(count)}"
+    )
+    df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
+    return df.sort_values("time")
+
+
 def main() -> None:
     args = parse_args()
 
-    end_ts, latest_vol = latest_volume(args.symbol)
-    if end_ts is None:
+    df_latest = last_volumes(args.symbol, 4)
+    if df_latest.empty:
         print("No data for symbol")
         return
 
+    end_ts = int(df_latest["time"].max())
     start_ts = end_ts - args.window * 3600 * 1000
     vols = history_volumes(args.symbol, start_ts, end_ts - 1)
     if vols.empty:
@@ -85,17 +96,23 @@ def main() -> None:
     threshold = vols.quantile(args.quantile)
 
     tz = pytz.timezone(TZ_NAME)
-    ts_str = datetime.fromtimestamp(end_ts / 1000, tz).strftime("%Y-%m-%d %H:%M")
+    alerts = []
+    for row in df_latest.itertuples(index=False):
+        if row.volume_usd > threshold:
+            ts_str = datetime.fromtimestamp(row.time / 1000, tz).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            alerts.append(
+                f"[{ts_str}] {args.symbol} 成交量异动：当前 {row.volume_usd:.0f} > "
+                f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
+            )
 
-    if latest_vol > threshold:
-        msg = (
-            f"[{ts_str}] {args.symbol} 成交量异动：当前 {latest_vol:.0f} > "
-            f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
-        )
-        print(msg)
-        send_message(msg)
+    if alerts:
+        for msg in alerts:
+            print(msg)
+            send_message(msg)
     else:
-        print("正常")
+        print("当前4h内Binance场内无交易量异动")
 
 
 if __name__ == "__main__":
