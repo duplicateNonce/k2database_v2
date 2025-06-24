@@ -121,6 +121,10 @@ def main() -> None:
         return
 
     df = pd.DataFrame(records)
+    df = df[df["pct"] >= 200]
+    if df.empty:
+        print("No significant volume deviations")
+        return
     df["差异"] = df["pct"].map(lambda x: f"{x:.2f}%")
     df = df.sort_values("pct", ascending=False).reset_index(drop=True)
     df = df.head(args.top)
