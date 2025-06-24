@@ -19,11 +19,17 @@ def secret_get(key: str, default: str = ""):
     val = os.getenv(key)
     if val is not None and val != "":
         return os.path.expandvars(val)
-    if st and key in st.secrets:
-        secret_val = st.secrets[key]
-        if isinstance(secret_val, str):
-            secret_val = os.path.expandvars(secret_val)
-        return secret_val
+    if st:
+        try:
+            if key in st.secrets:
+                secret_val = st.secrets[key]
+                if isinstance(secret_val, str):
+                    secret_val = os.path.expandvars(secret_val)
+                return secret_val
+        except Exception:
+            # If Streamlit can't load secrets (e.g., running outside Streamlit),
+            # just fall back to the provided default.
+            pass
     return default
 
 # 通用环境配置
@@ -45,8 +51,12 @@ TZ_NAME = "Asia/Shanghai"
 # 登录凭据（从环境变量读取）
 # 支持在 APP_USERS 中使用 "user:pass" 列表，逗号分隔
 _multi = secret_get("APP_USERS")
-if not _multi and st and "app_users" in st.secrets:
-    _multi = ",".join(f"{k}:{v}" for k, v in st.secrets["app_users"].items())
+if not _multi and st:
+    try:
+        if "app_users" in st.secrets:
+            _multi = ",".join(f"{k}:{v}" for k, v in st.secrets["app_users"].items())
+    except Exception:
+        pass
 
 USER_CREDENTIALS = {}
 if _multi:
