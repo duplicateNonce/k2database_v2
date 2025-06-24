@@ -43,21 +43,21 @@ def parse_args() -> argparse.Namespace:
 
 
 def latest_volume(symbol: str) -> tuple[int, float] | tuple[None, None]:
-    """Return ``(time, volume)`` of the newest record for ``symbol``."""
+    """Return ``(time, volume_usd)`` of the newest record for ``symbol``."""
     sql = text(
-        "SELECT time, volume FROM volume_data "
+        "SELECT time, volume_usd FROM ohlcv_1h "
         "WHERE symbol=:sym ORDER BY time DESC LIMIT 1"
     )
     df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol})
     if df.empty:
         return None, None
-    return int(df.loc[0, "time"]), float(df.loc[0, "volume"])
+    return int(df.loc[0, "time"]), float(df.loc[0, "volume_usd"])
 
 
 def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     """Return historical volumes for ``symbol`` between ``start_ts`` and ``end_ts``."""
     sql = text(
-        "SELECT volume FROM volume_data "
+        "SELECT volume_usd FROM ohlcv_1h "
         "WHERE symbol=:sym AND time BETWEEN :start AND :end"
     )
     df = pd.read_sql(
@@ -65,32 +65,32 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
         engine_ohlcv,
         params={"sym": symbol, "start": start_ts, "end": end_ts},
     )
-    return df["volume"]
+    return df["volume_usd"]
 
 
 def main() -> None:
     args = parse_args()
 
-    ts, vt = latest_volume(args.symbol)
-    if ts is None:
+    end_ts, latest_vol = latest_volume(args.symbol)
+    if end_ts is None:
         print("No data for symbol")
         return
 
-    start_ts = ts - args.window * 3600 * 1000
-    vols = history_volumes(args.symbol, start_ts, ts - 1)
+    start_ts = end_ts - args.window * 3600 * 1000
+    vols = history_volumes(args.symbol, start_ts, end_ts - 1)
     if vols.empty:
         print("Not enough history")
         return
 
-    q = vols.quantile(args.quantile)
+    threshold = vols.quantile(args.quantile)
 
     tz = pytz.timezone(TZ_NAME)
-    ts_str = datetime.fromtimestamp(ts / 1000, tz).strftime("%Y-%m-%d %H:%M")
+    ts_str = datetime.fromtimestamp(end_ts / 1000, tz).strftime("%Y-%m-%d %H:%M")
 
-    if vt > q:
+    if latest_vol > threshold:
         msg = (
-            f"[{ts_str}] {args.symbol} 成交量异动：当前 {vt:.0f} > "
-            f"{args.quantile * 100:.0f}% 分位 {q:.0f}"
+            f"[{ts_str}] {args.symbol} 成交量异动：当前 {latest_vol:.0f} > "
+            f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
         )
         print(msg)
         send_message(msg)
