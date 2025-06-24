@@ -24,8 +24,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--symbol",
-        default="BTCUSDT",
-        help="Trading pair to check",
+        help=(
+            "Trading pair to check. If omitted, all symbols in the database are"
+            " checked"
+        ),
     )
     parser.add_argument(
         "--window",
@@ -78,23 +80,22 @@ def last_volumes(symbol: str, count: int = 4) -> pd.DataFrame:
     return df.sort_values("time")
 
 
-def main() -> None:
-    args = parse_args()
-
-    df_latest = last_volumes(args.symbol, 4)
+def check_symbol(symbol: str, window: int, quantile: float) -> list[str]:
+    """Check ``symbol`` for volume anomalies and return alert messages."""
+    df_latest = last_volumes(symbol, 4)
     if df_latest.empty:
-        print("No data for symbol")
-        return
+        print(f"No data for {symbol}")
+        return []
 
     earliest = int(df_latest["time"].min())
     hist_end = earliest - 1
-    start_ts = hist_end - args.window * 3600 * 1000
-    vols = history_volumes(args.symbol, start_ts, hist_end)
+    start_ts = hist_end - window * 3600 * 1000
+    vols = history_volumes(symbol, start_ts, hist_end)
     if vols.empty:
-        print("Not enough history")
-        return
+        print(f"Not enough history for {symbol}")
+        return []
 
-    threshold = vols.quantile(args.quantile)
+    threshold = vols.quantile(quantile)
 
     def percentile_rank(v: float) -> float:
         """Return the percentile rank of ``v`` within ``vols``."""
@@ -109,18 +110,34 @@ def main() -> None:
         report_rows.append((ts_str, pct))
         if row.volume > threshold:
             alerts.append(
-                f"[{ts_str}] {args.symbol} 成交量异动：当前 {row.volume:.0f} > "
-                f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
+                f"[{ts_str}] {symbol} 成交量异动：当前 {row.volume:.0f} > "
+                f"{quantile * 100:.0f}% 分位 {threshold:.0f}"
             )
 
-    print(f"Symbol: {args.symbol}")
+    print(f"Symbol: {symbol}")
     print("Last 4 periods and percentile ranks:")
     for ts_str, pct in report_rows:
         print(f"{ts_str} -> {pct:.2f}%")
 
-    if alerts:
-        for msg in alerts:
-            print(msg)
+    return alerts
+
+
+def main() -> None:
+    args = parse_args()
+
+    with engine_ohlcv.begin() as conn:
+        if args.symbol:
+            symbols = [args.symbol]
+        else:
+            symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
+
+    all_alerts: list[str] = []
+    for sym in symbols:
+        alerts = check_symbol(sym, args.window, args.quantile)
+        all_alerts.extend(alerts)
+
+    if all_alerts:
+        for msg in all_alerts:
             send_message(msg)
     else:
         print("当前4h内Binance场内无交易量异动")
