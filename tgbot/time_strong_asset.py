@@ -7,6 +7,11 @@ from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy import text
 import pytz
+import os
+import sys
+
+# Ensure imports work when running this script directly
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from strategies.strong_assets import compute_period_metrics
 from db import engine_ohlcv
