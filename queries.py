@@ -41,16 +41,41 @@ def fetch_instruments(engine):
 
 # OHLCV 表接口
 
-def fetch_ohlcv(engine, symbol, start_ts, end_ts):
+def fetch_ohlcv(engine, symbol, start_ts, end_ts, table="ohlcv_1h"):
+    """Fetch OHLCV records from the specified table.
+
+    Parameters
+    ----------
+    engine : sqlalchemy.engine.Engine
+        Database engine to execute the query against.
+    symbol : str
+        Trading pair symbol.
+    start_ts : int
+        Start timestamp in milliseconds.
+    end_ts : int
+        End timestamp in milliseconds.
+    table : str, optional
+        Table name to query, defaults to ``"ohlcv_1h"``.
+    """
+
+    if table not in {"ohlcv_1h", "ohlcv_4h"}:
+        raise ValueError("Invalid OHLCV table name")
+
+    sql = text(
+        f"SELECT * FROM {table} WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
+    )
     return pd.read_sql(
-        text(
-            "SELECT * FROM ohlcv_1h WHERE symbol=:symbol AND time BETWEEN :start AND :end ORDER BY time"
-        ),
+        sql,
         engine,
         params={"symbol": symbol, "start": start_ts, "end": end_ts},
     )
 
 
-def fetch_distinct_ohlcv_symbols(engine) -> list[str]:
-    df = pd.read_sql("SELECT DISTINCT symbol FROM ohlcv_1h", engine)
+def fetch_distinct_ohlcv_symbols(engine, table="ohlcv_1h") -> list[str]:
+    """Return all distinct symbols from the specified OHLCV table."""
+
+    if table not in {"ohlcv_1h", "ohlcv_4h"}:
+        raise ValueError("Invalid OHLCV table name")
+
+    df = pd.read_sql(f"SELECT DISTINCT symbol FROM {table}", engine)
     return df["symbol"].tolist()

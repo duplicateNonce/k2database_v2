@@ -10,6 +10,15 @@ def render_ohlcv_page():
     instruments = fetch_instruments(engine_ohlcv)["symbol"].tolist()
     symbol = st.selectbox("选择交易对", instruments, key="ohlcv_sym")
 
+    table = st.selectbox(
+        "选择表",
+        (
+            "ohlcv_1h",
+            "ohlcv_4h",
+        ),
+        key="ohlcv_table",
+    )
+
     start_date = st.date_input(
         "开始日期", datetime.now() - timedelta(days=7), key="ohlcv_start_date"
     )
@@ -31,7 +40,7 @@ def render_ohlcv_page():
         start_ts = int(start_dt.timestamp() * 1000)
         end_ts = int(end_dt.timestamp() * 1000)
 
-        df = fetch_ohlcv(engine_ohlcv, symbol, start_ts, end_ts)
+        df = fetch_ohlcv(engine_ohlcv, symbol, start_ts, end_ts, table=table)
         if not df.empty:
             # 1. 将毫秒时间戳转换为 UTC+0 datetime 再转到 UTC+8
             df['datetime'] = (
