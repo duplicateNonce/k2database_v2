@@ -89,6 +89,10 @@ You can also define the same variables in `secrets.toml` when deploying to
 Streamlit Cloud.  If these variables are missing, the helper will print the
 message to stdout instead of silently ignoring it so local testing is easier.
 
+Messages containing ASCII tables are sent using Markdown code blocks so they
+align properly in Telegram.  If you send your own messages with code-style
+formatting, pass ``parse_mode="Markdown"`` to ``send_message``.
+
 ## Streamlit notes
 
 This project runs on a minimal Streamlit build that does **not** support

@@ -64,7 +64,7 @@ def main() -> None:
     print(table)
 
     # Send to Telegram if credentials are configured
-    send_message(f"{header}\n```\n{table}\n```")
+    send_message(f"{header}\n```\n{table}\n```", parse_mode="Markdown")
 
 
 if __name__ == "__main__":
