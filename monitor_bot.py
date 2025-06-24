@@ -44,21 +44,21 @@ def _display_width(text: str) -> int:
 
 
 def ascii_table(df: pd.DataFrame) -> str:
+    """Return comma separated lines for ``df``.
+
+    The first line contains the headers, followed by one line per row in the
+    same comma separated format. This format is easier to read on small
+    screens compared to an ASCII table.
+    """
+
+    if df.empty:
+        return ""
+
     headers = list(df.columns)
     rows = df.astype(str).values.tolist()
-    widths = [max(_display_width(h), *(_display_width(r[i]) for r in rows)) for i, h in enumerate(headers)]
 
-    def pad(val: str, width: int) -> str:
-        pad_len = width - _display_width(val)
-        return val + " " * max(pad_len, 0)
-
-    border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
-    lines = [border]
-    lines.append("| " + " | ".join(pad(h, w) for h, w in zip(headers, widths)) + " |")
-    lines.append(border)
-    for r in rows:
-        lines.append("| " + " | ".join(pad(val, w) for val, w in zip(r, widths)) + " |")
-    lines.append(border)
+    lines = [", ".join(headers)]
+    lines.extend(", ".join(r) for r in rows)
     return "\n".join(lines)
 
 
