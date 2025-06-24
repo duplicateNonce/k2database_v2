@@ -1,0 +1,3 @@
+# Run the strong asset notifier at 05 minutes past each hour
+# Adjust the path to the repository as needed
+5 * * * * /usr/bin/python3 /path/to/repo/tgbot/time_strong_asset.py >> /var/log/time_strong_asset.log 2>&1
