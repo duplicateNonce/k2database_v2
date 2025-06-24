@@ -130,3 +130,10 @@ Aggregated 4h candles are cached under `data/cache/4h` as CSV files to
 avoid recomputing from raw 15 minute data. Each query updates the cache
 with any new records and the bot keeps aggregated results in memory to
 speed up repeated checks.
+
+### Hourly candle times
+
+Records in the `ohlcv_1h` table use the **start time** of each hour as
+their `time` value. For example, the period from 16:00 to 17:00 is stored
+under the timestamp for 16:00. When querying for a specific hour you must
+filter by its starting timestamp rather than the end.
