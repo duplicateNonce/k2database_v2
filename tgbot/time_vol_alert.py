@@ -96,17 +96,27 @@ def main() -> None:
 
     threshold = vols.quantile(args.quantile)
 
+    def percentile_rank(v: float) -> float:
+        """Return the percentile rank of ``v`` within ``vols``."""
+        return pd.concat([vols, pd.Series([v])]).rank(pct=True).iloc[-1] * 100
+
     tz = pytz.timezone(TZ_NAME)
     alerts = []
+    report_rows = []
     for row in df_latest.itertuples(index=False):
+        ts_str = datetime.fromtimestamp(row.time / 1000, tz).strftime("%Y-%m-%d %H:%M")
+        pct = percentile_rank(row.volume)
+        report_rows.append((ts_str, pct))
         if row.volume > threshold:
-            ts_str = datetime.fromtimestamp(row.time / 1000, tz).strftime(
-                "%Y-%m-%d %H:%M"
-            )
             alerts.append(
                 f"[{ts_str}] {args.symbol} 成交量异动：当前 {row.volume:.0f} > "
                 f"{args.quantile * 100:.0f}% 分位 {threshold:.0f}"
             )
+
+    print(f"Symbol: {args.symbol}")
+    print("Last 4 periods and percentile ranks:")
+    for ts_str, pct in report_rows:
+        print(f"{ts_str} -> {pct:.2f}%")
 
     if alerts:
         for msg in alerts:
