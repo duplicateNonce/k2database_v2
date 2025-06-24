@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Check hourly trading volume against a 144 day rolling average."""
+"""Check hourly trading volume against a rolling average.
+
+By default the last 24 hourly candles are used for the average, providing a
+simple intraday comparison."""
 
 from __future__ import annotations
 
@@ -33,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--window",
         type=int,
-        default=144 * 24,
+        default=24,
         help="Look-back window in hours for rolling average",
     )
     parser.add_argument(
@@ -125,7 +128,11 @@ def main() -> None:
     df = df[["symbol", "差异"]].rename(columns={"symbol": "代币名字"})
 
     table = format_ascii_table(df)
-    header = f"{label} 成交量异动 (144天均量)"
+    if args.window % 24 == 0:
+        period = f"{args.window // 24}天"
+    else:
+        period = f"{args.window}小时"
+    header = f"{label} 成交量异动 ({period}均量)"
     print(header)
     print(table)
     send_message(f"{header}\n```\n{table}\n```", parse_mode="Markdown")
