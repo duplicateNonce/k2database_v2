@@ -3,28 +3,41 @@ from datetime import datetime, timedelta
 import pytz
 from streamlit_autorefresh import st_autorefresh
 import pandas as pd
+from pathlib import Path
 from utils import safe_rerun
 from config import TZ_NAME
 from tgbot.time_strong_asset import last_4h_range
 from tgbot.time_vol_alert import last_hour_label
-from result_cache import load_cached
+
+CACHE_BASE = Path("/home/ubuntu/k2database/tgbot/data/cache")
+
+
+def _read_latest(subdir: str) -> pd.DataFrame:
+    """Return the contents of the most recently modified CSV in ``subdir``."""
+    folder = CACHE_BASE / subdir
+    if not folder.exists():
+        return pd.DataFrame()
+    csv_files = list(folder.glob("*.csv"))
+    if not csv_files:
+        return pd.DataFrame()
+    latest = max(csv_files, key=lambda p: p.stat().st_mtime)
+    try:
+        return pd.read_csv(latest, index_col=0)
+    except Exception:
+        return pd.DataFrame()
 
 
 def _latest_strong_assets() -> tuple[str, pd.DataFrame]:
     """Return label and cached dataframe for the last 4h strong assets."""
     _, _, label = last_4h_range()
-    _cid, df = load_cached("overview_sa", {})
-    if df is None:
-        return label, pd.DataFrame()
+    df = _read_latest("overview_sa")
     return label, df
 
 
 def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
     """Return label and cached dataframe for the last hour volume alert."""
     _, label = last_hour_label()
-    _cid, df = load_cached("overview_vol", {})
-    if df is None:
-        return label, pd.DataFrame()
+    df = _read_latest("overview_vol")
     return label, df
 
 def render_overview():
