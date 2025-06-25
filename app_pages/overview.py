@@ -5,6 +5,7 @@ from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 from sqlalchemy import text
 from utils import safe_rerun
+from result_cache import load_cached, save_cached
 from config import TZ_NAME
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
@@ -15,6 +16,10 @@ from tgbot.time_vol_alert import last_hour_label, volume_deviation, hour_change_
 def _latest_strong_assets() -> tuple[str, pd.DataFrame]:
     """Return label and dataframe for the last 4h strong assets."""
     start_ts, end_ts, label = last_4h_range()
+    params = {"start": start_ts, "end": end_ts}
+    cache_id, df = load_cached("overview_sa", params)
+    if df is not None:
+        return label, df
     with engine_ohlcv.begin() as conn:
         symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
         label_map = {r[0]: r[1] for r in conn.execute(text("SELECT instrument_id, labels FROM instruments"))}
@@ -37,12 +42,17 @@ def _latest_strong_assets() -> tuple[str, pd.DataFrame]:
     df["期间收益"] = (df["period_return"] * 100).map(lambda x: f"{x:.2f}%")
     df["symbol"] = df["symbol"].str.replace("USDT", "")
     df = df[["标签", "symbol", "期间收益"]].rename(columns={"symbol": "代币名字"})
+    save_cached("overview_sa", params, df)
     return label, df
 
 
 def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
     """Return label and dataframe for the last hour volume alert."""
     start_ts, label = last_hour_label()
+    params = {"start": start_ts}
+    cache_id, df = load_cached("overview_vol", params)
+    if df is not None:
+        return label, df
     with engine_ohlcv.begin() as conn:
         symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
 
@@ -69,6 +79,7 @@ def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
     df = df.sort_values("pct", ascending=False).head(20).reset_index(drop=True)
     df["symbol"] = df["symbol"].str.replace("USDT", "")
     df = df[["symbol", "差异", "涨幅"]].rename(columns={"symbol": "代币名字"})
+    save_cached("overview_vol", params, df)
     return label, df
 
 def render_overview():
