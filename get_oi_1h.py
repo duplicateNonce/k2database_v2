@@ -13,6 +13,7 @@ from decimal import Decimal
 from tqdm import tqdm
 
 REQ_TIMESTAMPS = []
+LAST_REQ_TIME = 0.0
 MAX_REQS_PER_MIN = 79
 REQ_LOCK = threading.Lock()
 
@@ -35,15 +36,24 @@ DB_CFG = {
 
 def wait_rate_limit() -> None:
     """Ensure request rate within limit."""
+    global LAST_REQ_TIME
     with REQ_LOCK:
         now = time.time()
+        # maintain at least 1 second between requests
+        if LAST_REQ_TIME and now - LAST_REQ_TIME < 1:
+            time.sleep(1 - (now - LAST_REQ_TIME))
+            now = time.time()
         REQ_TIMESTAMPS[:] = [t for t in REQ_TIMESTAMPS if now - t < 60]
         if len(REQ_TIMESTAMPS) >= MAX_REQS_PER_MIN:
-            print(f"\u8fbe\u5230\u6bcf\u5206\u949f{MAX_REQS_PER_MIN}\u6b21\u8bf7\u6c42\u4e0a\u9650\uff0c\u6682\u505c10\u79d2", flush=True)
+            print(
+                f"\u8fbe\u5230\u6bcf\u5206\u949f{MAX_REQS_PER_MIN}\u6b21\u8bf7\u6c42\u4e0a\u9650\uff0c\u6682\u505c10\u79d2",
+                flush=True,
+            )
             time.sleep(10)
             now = time.time()
             REQ_TIMESTAMPS[:] = [t for t in REQ_TIMESTAMPS if now - t < 60]
-        REQ_TIMESTAMPS.append(time.time())
+        REQ_TIMESTAMPS.append(now)
+        LAST_REQ_TIME = now
 
 
 def ensure_table():
@@ -109,6 +119,7 @@ def fetch_oi(exchange: str, symbol: str, end_ts: int) -> dict[int, Decimal]:
     for attempt in range(3):
         wait_rate_limit()
         try:
+            print(f"{exchange} {symbol} request", flush=True)
             resp = requests.get(
                 url,
                 headers={"CG-API-KEY": API_KEY, "accept": "application/json"},
@@ -131,7 +142,10 @@ def fetch_oi(exchange: str, symbol: str, end_ts: int) -> dict[int, Decimal]:
         except Exception as exc:
             if attempt == 2:
                 raise
-            print(f"{symbol} {exchange} \u8bf7\u6c42\u5931\u8d25\u5c1d\u8bd5\u91cd\u8bd5: {exc}", flush=True)
+            print(
+                f"{exchange} {symbol} \u8bf7\u6c42\u5931\u8d25\u5c1d\u8bd5\u91cd\u8bd5: {exc}",
+                flush=True,
+            )
             time.sleep(1)
 
 
@@ -158,7 +172,7 @@ ON CONFLICT(symbol, time) DO NOTHING;
     return count
 
 
-def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, int]:
+def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, bool]:
     """Download and save open interest for one symbol."""
     # show the exchange order in the log so it is clear Binance is requested
     # before Bybit
@@ -167,19 +181,21 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
     expected_last = end_ts
     if latest is not None and latest >= expected_last:
         print(f"Binance Bybit {symbol} \u6570\u636e\u5df2\u662f\u6700\u65b0\uff0c\u8df3\u8fc7", flush=True)
-        return 0, 0
+        return 0, False
 
     try:
         data_binance = fetch_oi("Binance", symbol, end_ts)
     except Exception as e:
         print(f"Binance {symbol} \u8bf7\u6c42\u5931\u8d25: {e}", flush=True)
-        return 0, 1
+        return 0, True
 
+    fail_flag = False
     try:
         data_bybit = fetch_oi("Bybit", symbol, end_ts)
     except Exception as e:
         print(f"Bybit {symbol} \u8bf7\u6c42\u5931\u8d25\uff0c\u4f7f\u7528 0: {e}", flush=True)
         data_bybit = {}
+        fail_flag = True
 
     all_ts = sorted(data_binance)
     records = [
@@ -194,8 +210,11 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
 
     n = len(records)
     if n == 0:
-        print(f"Binance Bybit {symbol} \u8bf7\u6c420\u6761\u6570\u636e \u5199\u51650\u6761\u6570\u636e", flush=True)
-        return 0, 0
+        print(
+            f"Binance Bybit {symbol} \u8bf7\u6c420\u6761\u6570\u636e \u5199\u51650\u6761\u6570\u636e",
+            flush=True,
+        )
+        return 0, fail_flag
 
     written = insert_data(records)
     last_ts = max(all_ts)
@@ -205,7 +224,7 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
         f"Binance Bybit {symbol} \u8bf7\u6c42{n}\u6761\u6570\u636e \u6210\u529f\u5199\u5165{written}\u6761\u6570\u636e \u6700\u65b0\u65f6\u95f4\u4e3a{last_str}",
         flush=True,
     )
-    return written, 0
+    return written, fail_flag
 
 
 def main() -> None:
@@ -223,18 +242,38 @@ def main() -> None:
         sys.exit(1)
 
     total = 0
-    failed = 0
+    failed_symbols: list[str] = []
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(process_symbol, sym, end_ts, tz8, interval): sym for sym in symbols}
         with tqdm(total=len(symbols)) as bar:
             for fut in as_completed(futures):
                 written, fail = fut.result()
                 total += written
-                failed += fail
+                if fail:
+                    failed_symbols.append(futures[fut])
                 bar.update(1)
-                bar.set_postfix(written=total, failed=failed)
+                bar.set_postfix(written=total, failed=len(failed_symbols))
 
-    print(f"\n\u603b\u5171\u5199\u5165 {total} \u6761\u6570\u636e\uff0c\u5931\u8d25 {failed} \u4e2asymbol", flush=True)
+    remaining_failed: list[str] = []
+    if failed_symbols:
+        print(f"Retrying failed symbols: {failed_symbols}", flush=True)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {executor.submit(process_symbol, sym, end_ts, tz8, interval): sym for sym in failed_symbols}
+            with tqdm(total=len(failed_symbols)) as bar:
+                for fut in as_completed(futures):
+                    written, fail = fut.result()
+                    total += written
+                    if fail:
+                        print(f"{futures[fut]} retry failed", flush=True)
+                        remaining_failed.append(futures[fut])
+                    bar.update(1)
+                    bar.set_postfix(written=total)
+
+    final_failed_count = len(remaining_failed)
+    print(
+        f"\n\u603b\u5171\u5199\u5165 {total} \u6761\u6570\u636e\uff0c\u5931\u8d25 {final_failed_count} \u4e2asymbol",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
