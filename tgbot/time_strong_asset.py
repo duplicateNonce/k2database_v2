@@ -15,6 +15,7 @@ from strategies.strong_assets import compute_period_metrics
 from db import engine_ohlcv
 from monitor_bot import ascii_table, send_message
 from config import TZ_NAME
+from result_cache import save_cached
 
 
 def last_4h_range() -> tuple[int, int, str]:
@@ -55,6 +56,8 @@ def main() -> None:
     df["symbol"] = df["symbol"].str.replace("USDT", "")
     df = df[["标签", "symbol", "期间收益"]]
     df = df.rename(columns={"symbol": "代币名字"})
+
+    save_cached("overview_sa", {}, df)
 
     table = ascii_table(df)
     header = f"最近4h（{label}）强势标的"

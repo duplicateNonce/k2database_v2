@@ -3,72 +3,28 @@ from datetime import datetime, timedelta
 import pytz
 from streamlit_autorefresh import st_autorefresh
 import pandas as pd
-from sqlalchemy import text
 from utils import safe_rerun
 from config import TZ_NAME
-from db import engine_ohlcv
-from strategies.strong_assets import compute_period_metrics
 from tgbot.time_strong_asset import last_4h_range
-from tgbot.time_vol_alert import last_hour_label, volume_deviation, hour_change_percent
+from tgbot.time_vol_alert import last_hour_label
+from result_cache import load_cached
 
 
 def _latest_strong_assets() -> tuple[str, pd.DataFrame]:
-    """Return label and dataframe for the last 4h strong assets."""
-    start_ts, end_ts, label = last_4h_range()
-    with engine_ohlcv.begin() as conn:
-        symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
-        label_map = {r[0]: r[1] for r in conn.execute(text("SELECT instrument_id, labels FROM instruments"))}
-
-    records = []
-    for sym in symbols:
-        try:
-            m = compute_period_metrics(sym, start_ts, end_ts)
-        except ValueError:
-            continue
-        m["symbol"] = sym
-        records.append(m)
-
-    if not records:
+    """Return label and cached dataframe for the last 4h strong assets."""
+    _, _, label = last_4h_range()
+    _cid, df = load_cached("overview_sa", {})
+    if df is None:
         return label, pd.DataFrame()
-
-    df = pd.DataFrame(records)
-    df["标签"] = df["symbol"].map(lambda s: "，".join(label_map.get(s, [])) if label_map.get(s) else "")
-    df = df.sort_values("period_return", ascending=False).head(10).reset_index(drop=True)
-    df["期间收益"] = (df["period_return"] * 100).map(lambda x: f"{x:.2f}%")
-    df["symbol"] = df["symbol"].str.replace("USDT", "")
-    df = df[["标签", "symbol", "期间收益"]].rename(columns={"symbol": "代币名字"})
     return label, df
 
 
 def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
-    """Return label and dataframe for the last hour volume alert."""
-    start_ts, label = last_hour_label()
-    with engine_ohlcv.begin() as conn:
-        symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM ohlcv_1h"))]
-
-    records = []
-    for sym in symbols:
-        pct = volume_deviation(sym, start_ts, 24)
-        if pct is None:
-            continue
-        chg = hour_change_percent(sym, start_ts)
-        if chg is None or chg < 0:
-            continue
-        records.append({"symbol": sym, "pct": pct, "chg": chg})
-
-    if not records:
+    """Return label and cached dataframe for the last hour volume alert."""
+    _, label = last_hour_label()
+    _cid, df = load_cached("overview_vol", {})
+    if df is None:
         return label, pd.DataFrame()
-
-    df = pd.DataFrame(records)
-    df = df[df["pct"] >= 200]
-    if df.empty:
-        return label, pd.DataFrame()
-
-    df["差异"] = df["pct"].map(lambda x: f"{x:.2f}%")
-    df["涨幅"] = df["chg"].map(lambda x: f"{x:.2f}%")
-    df = df.sort_values("pct", ascending=False).head(20).reset_index(drop=True)
-    df["symbol"] = df["symbol"].str.replace("USDT", "")
-    df = df[["symbol", "差异", "涨幅"]].rename(columns={"symbol": "代币名字"})
     return label, df
 
 def render_overview():
