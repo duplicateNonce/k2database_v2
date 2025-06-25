@@ -74,32 +74,44 @@ def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
 def render_overview():
     st.title("Dashboard")
 
-    # Auto refresh every hour at the 6 minute mark
     tz = pytz.timezone(TZ_NAME)
     now = datetime.now(tz)
-    refresh_time = now.replace(minute=6, second=0, microsecond=0)
-    if now >= refresh_time:
-        refresh_time += timedelta(hours=1)
-    interval_ms = int((refresh_time - now).total_seconds() * 1000)
-    st_autorefresh(interval=interval_ms, key="overview_refresh")
 
-    # Countdown until next auto refresh
+    def _next_refresh_time(dt: datetime) -> datetime:
+        rt = dt.replace(minute=6, second=0, microsecond=0)
+        if dt >= rt:
+            rt += timedelta(hours=1)
+        return rt
+
+    if "next_refresh_time" not in st.session_state:
+        st.session_state["next_refresh_time"] = _next_refresh_time(now)
+
+    refresh_time = st.session_state["next_refresh_time"]
+    st_autorefresh(interval=1000, key="overview_timer")
+
     time_left = refresh_time - now
+    refresh_due = time_left.total_seconds() <= 0
+
     col_spacer, col_countdown, col_button = st.columns([8, 2, 1])
     with col_countdown:
-        st.markdown(f"下次刷新倒计时：{str(time_left).split('.')[0]}")
+        if refresh_due:
+            st.markdown("下次刷新倒计时：刷新中")
+        else:
+            st.markdown(f"下次刷新倒计时：{str(time_left).split('.')[0]}")
     with col_button:
-        refresh = st.button("\U0001F504", help="手动刷新")
+        refresh = st.button("↻", help="手动刷新")
 
     if (
         "sa_df" not in st.session_state
         or "vol_df" not in st.session_state
         or refresh
+        or refresh_due
     ):
         sa_label, st.session_state["sa_df"] = _latest_strong_assets()
         st.session_state["sa_label"] = sa_label
         vol_label, st.session_state["vol_df"] = _latest_volume_alert()
         st.session_state["vol_label"] = vol_label
+        st.session_state["next_refresh_time"] = _next_refresh_time(datetime.now(tz))
 
     sa_label = st.session_state.get("sa_label", "")
     vol_label = st.session_state.get("vol_label", "")
