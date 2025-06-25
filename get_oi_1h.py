@@ -160,22 +160,25 @@ ON CONFLICT(symbol, time) DO NOTHING;
 
 def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, int]:
     """Download and save open interest for one symbol."""
+    # show the exchange order in the log so it is clear Binance is requested
+    # before Bybit
+    print(f"Binance Bybit {symbol}", flush=True)
     latest = get_symbol_latest_ts(symbol)
     expected_last = end_ts
     if latest is not None and latest >= expected_last:
-        print(f"{symbol} \u6570\u636e\u5df2\u662f\u6700\u65b0\uff0c\u8df3\u8fc7", flush=True)
+        print(f"Binance Bybit {symbol} \u6570\u636e\u5df2\u662f\u6700\u65b0\uff0c\u8df3\u8fc7", flush=True)
         return 0, 0
 
     try:
         data_binance = fetch_oi("Binance", symbol, end_ts)
     except Exception as e:
-        print(f"{symbol} Binance \u8bf7\u6c42\u5931\u8d25: {e}", flush=True)
+        print(f"Binance {symbol} \u8bf7\u6c42\u5931\u8d25: {e}", flush=True)
         return 0, 1
 
     try:
         data_bybit = fetch_oi("Bybit", symbol, end_ts)
     except Exception as e:
-        print(f"{symbol} Bybit \u8bf7\u6c42\u5931\u8d25\uff0c\u4f7f\u7528 0: {e}", flush=True)
+        print(f"Bybit {symbol} \u8bf7\u6c42\u5931\u8d25\uff0c\u4f7f\u7528 0: {e}", flush=True)
         data_bybit = {}
 
     all_ts = sorted(data_binance)
@@ -191,7 +194,7 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
 
     n = len(records)
     if n == 0:
-        print(f"{symbol} \u8bf7\u6c420\u6761\u6570\u636e \u5199\u51650\u6761\u6570\u636e", flush=True)
+        print(f"Binance Bybit {symbol} \u8bf7\u6c420\u6761\u6570\u636e \u5199\u51650\u6761\u6570\u636e", flush=True)
         return 0, 0
 
     written = insert_data(records)
@@ -199,7 +202,7 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
     last_dt = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc).astimezone(tz8)
     last_str = last_dt.strftime("%Y-%m-%d %H:%M:%S")
     print(
-        f"{symbol} \u8bf7\u6c42{n}\u6761\u6570\u636e \u6210\u529f\u5199\u5165{written}\u6761\u6570\u636e \u6700\u65b0\u65f6\u95f4\u4e3a{last_str}",
+        f"Binance Bybit {symbol} \u8bf7\u6c42{n}\u6761\u6570\u636e \u6210\u529f\u5199\u5165{written}\u6761\u6570\u636e \u6700\u65b0\u65f6\u95f4\u4e3a{last_str}",
         flush=True,
     )
     return written, 0
@@ -207,6 +210,8 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
 
 def main() -> None:
     ensure_table()
+    # indicate exchange order at the very beginning of logs
+    print("Binance Bybit", flush=True)
     tz8 = timezone(timedelta(hours=8))
     interval = 3600 * 1000
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
