@@ -51,7 +51,12 @@ def render_overview():
     st_autorefresh(interval=interval, key="overview_timer")
 
     def manual_refresh() -> None:
-        st.session_state["force_refresh"] = True
+        """Reload cached results and refresh the page."""
+        sa_label, st.session_state["sa_df"] = _latest_strong_assets()
+        st.session_state["sa_label"] = sa_label
+        vol_label, st.session_state["vol_df"] = _latest_volume_alert()
+        st.session_state["vol_label"] = vol_label
+        st.session_state["next_refresh_time"] = _next_refresh_time(datetime.now(tz))
         safe_rerun()
 
     col_spacer, col_countdown, col_button = st.columns([8, 2, 1])
@@ -62,12 +67,10 @@ def render_overview():
             st.markdown(f"下次刷新倒计时：{str(time_left).split('.')[0]}")
     with col_button:
         st.button("↻", help="手动刷新", on_click=manual_refresh)
-    refresh = st.session_state.pop("force_refresh", False)
 
     if (
         "sa_df" not in st.session_state
         or "vol_df" not in st.session_state
-        or refresh
         or refresh_due
     ):
         sa_label, st.session_state["sa_df"] = _latest_strong_assets()
