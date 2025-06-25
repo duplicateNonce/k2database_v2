@@ -4,7 +4,7 @@ import pytz
 from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 from sqlalchemy import text
-
+from utils import safe_rerun
 from config import TZ_NAME
 from db import engine_ohlcv
 from strategies.strong_assets import compute_period_metrics
