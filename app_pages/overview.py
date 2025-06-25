@@ -87,10 +87,16 @@ def render_overview():
         st.session_state["next_refresh_time"] = _next_refresh_time(now)
 
     refresh_time = st.session_state["next_refresh_time"]
-    st_autorefresh(interval=1000, key="overview_timer")
 
     time_left = refresh_time - now
     refresh_due = time_left.total_seconds() <= 0
+
+    interval = 1000 if time_left.total_seconds() <= 30 else 10_000
+    st_autorefresh(interval=interval, key="overview_timer")
+
+    def manual_refresh() -> None:
+        st.session_state["force_refresh"] = True
+        safe_rerun()
 
     col_spacer, col_countdown, col_button = st.columns([8, 2, 1])
     with col_countdown:
@@ -99,7 +105,8 @@ def render_overview():
         else:
             st.markdown(f"下次刷新倒计时：{str(time_left).split('.')[0]}")
     with col_button:
-        refresh = st.button("↻", help="手动刷新")
+        st.button("↻", help="手动刷新", on_click=manual_refresh)
+    refresh = st.session_state.pop("force_refresh", False)
 
     if (
         "sa_df" not in st.session_state
