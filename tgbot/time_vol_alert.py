@@ -74,6 +74,28 @@ def history_volumes(symbol: str, start_ts: int, end_ts: int) -> pd.Series:
     return df["volume"]
 
 
+def hour_open_close(symbol: str, ts: int) -> tuple[float, float] | None:
+    """Return open and close prices for ``symbol`` at ``ts``."""
+    sql = text(
+        "SELECT open, close FROM ohlcv_1h WHERE symbol=:sym AND time=:t"
+    )
+    df = pd.read_sql(sql, engine_ohlcv, params={"sym": symbol, "t": ts})
+    if df.empty:
+        return None
+    return float(df.loc[0, "open"]), float(df.loc[0, "close"])
+
+
+def hour_change_percent(symbol: str, ts: int) -> float | None:
+    """Return percentage change between open and close for ``symbol`` at ``ts``."""
+    oc = hour_open_close(symbol, ts)
+    if oc is None:
+        return None
+    open_price, close_price = oc
+    if open_price == 0:
+        return None
+    return (close_price - open_price) / open_price * 100
+
+
 def volume_deviation(symbol: str, ts: int, window: int) -> float | None:
     """Return percentage difference to ``window`` hour mean for ``symbol``."""
     vol = hour_volume(symbol, ts)
@@ -114,7 +136,10 @@ def main() -> None:
         pct = volume_deviation(sym, start_ts, args.window)
         if pct is None:
             continue
-        records.append({"symbol": sym, "pct": pct})
+        chg = hour_change_percent(sym, start_ts)
+        if chg is None or chg < 0:
+            continue
+        records.append({"symbol": sym, "pct": pct, "chg": chg})
 
     if not records:
         print("No data for the specified period")
@@ -126,10 +151,11 @@ def main() -> None:
         print("No significant volume deviations")
         return
     df["差异"] = df["pct"].map(lambda x: f"{x:.2f}%")
+    df["涨幅"] = df["chg"].map(lambda x: f"{x:.2f}%")
     df = df.sort_values("pct", ascending=False).reset_index(drop=True)
     df = df.head(args.top)
     df["symbol"] = df["symbol"].str.replace("USDT", "")
-    df = df[["symbol", "差异"]].rename(columns={"symbol": "代币名字"})
+    df = df[["symbol", "差异", "涨幅"]].rename(columns={"symbol": "代币名字"})
 
     table = format_ascii_table(df)
     if args.window % 24 == 0:
