@@ -21,6 +21,7 @@ from db import engine_ohlcv
 from monitor_bot import send_message
 from test1hstrong import format_ascii_table
 from config import TZ_NAME
+from result_cache import save_cached
 
 
 def parse_args() -> argparse.Namespace:
@@ -156,6 +157,8 @@ def main() -> None:
     df = df.head(args.top)
     df["symbol"] = df["symbol"].str.replace("USDT", "")
     df = df[["symbol", "差异", "涨幅"]].rename(columns={"symbol": "代币名字"})
+
+    save_cached("overview_vol", {}, df)
 
     table = format_ascii_table(df)
     if args.window % 24 == 0:
