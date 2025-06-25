@@ -168,18 +168,23 @@ def process_symbol(symbol: str, end_ts: int, tz8, interval: int) -> tuple[int, i
 
     try:
         data_binance = fetch_oi("Binance", symbol, end_ts)
-        data_bybit = fetch_oi("Bybit", symbol, end_ts)
     except Exception as e:
-        print(f"{symbol} \u8bf7\u6c42\u5931\u8d25: {e}", flush=True)
+        print(f"{symbol} Binance \u8bf7\u6c42\u5931\u8d25: {e}", flush=True)
         return 0, 1
 
-    all_ts = sorted(set(data_binance) | set(data_bybit))
+    try:
+        data_bybit = fetch_oi("Bybit", symbol, end_ts)
+    except Exception as e:
+        print(f"{symbol} Bybit \u8bf7\u6c42\u5931\u8d25\uff0c\u4f7f\u7528 0: {e}", flush=True)
+        data_bybit = {}
+
+    all_ts = sorted(data_binance)
     records = [
         (
             symbol,
             ts,
             data_binance.get(ts),
-            data_bybit.get(ts),
+            data_bybit.get(ts, Decimal("0")),
         )
         for ts in all_ts
     ]
