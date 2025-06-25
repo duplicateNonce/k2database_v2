@@ -83,8 +83,13 @@ def render_overview():
     interval_ms = int((refresh_time - now).total_seconds() * 1000)
     st_autorefresh(interval=interval_ms, key="overview_refresh")
 
-    st.subheader("定时推送任务")
-    refresh = st.button("手动刷新")
+    # Countdown until next auto refresh
+    time_left = refresh_time - now
+    col_spacer, col_countdown, col_button = st.columns([8, 2, 1])
+    with col_countdown:
+        st.markdown(f"下次刷新倒计时：{str(time_left).split('.')[0]}")
+    with col_button:
+        refresh = st.button("\U0001F504", help="手动刷新")
 
     if (
         "sa_df" not in st.session_state
