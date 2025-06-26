@@ -96,12 +96,12 @@ def last_record() -> dict | None:
 
 
 def _action_direction_text(action: int, size: float) -> str:
-    """Return combined action/direction string."""
+    """Return combined action/direction string with arrows for closing."""
     if action == 1:
-        return "开多📈" if size > 0 else "开空🈳"
+        return "操作：开多📈" if size > 0 else "操作：开空🈳"
     if action == 2:
-        return "平多" if size > 0 else "平空"
-    return f"{action}{'多' if size > 0 else '空'}"
+        return "平多⬇️" if size > 0 else "平空⬆️"
+    return f"操作：{action}{'多' if size > 0 else '空'}"
 
 
 def format_message(record: dict) -> str:
@@ -115,7 +115,7 @@ def format_message(record: dict) -> str:
         lev = f"{ep / (ep - lp):.1f}x"
     msg_lines = [
         "🚨🚨🚨 Hyperliquid大额开仓 🚨🚨🚨",
-        f"开仓地址：https://hyperdash.info/zh-CN/trader/{record['user']}",
+        f"开仓地址：[{record['user']}](https://hyperdash.info/zh-CN/trader/{record['user']})",
         f"时间：{time_str}",
         f"标的：{record['symbol']}",
         _action_direction_text(record['position_action'], record['position_size']),
@@ -143,12 +143,14 @@ def process_once(api_key: str) -> None:
             if r.get("position_value_usd", 0) >= 10_000_000:
                 msgs.append(msg)
         if msgs:
-            send_message("\n\n".join(msgs))
+            send_message("\n\n".join(msgs), parse_mode="Markdown")
     else:
-        log_msg("无大户开仓数据")
         rec = last_record()
         if rec:
-            log_msg(format_message(rec))
+            ts = datetime.fromtimestamp(rec["create_time"] / 1000, TZ).strftime("%Y-%m-%d %H:%M:%S")
+            log_msg(f"无大户开仓，最后一条开仓数据发生在{ts}")
+        else:
+            log_msg("无大户开仓数据")
 
 
 def main() -> None:
@@ -159,6 +161,10 @@ def main() -> None:
 
     log_msg("Hyperliquid whale alert activated")
     send_message("Hyperliquid whale alert activated")
+
+    rec = last_record()
+    if rec:
+        log_msg(format_message(rec))
 
     while True:
         try:
