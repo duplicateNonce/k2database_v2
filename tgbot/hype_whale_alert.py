@@ -95,16 +95,13 @@ def last_record() -> dict | None:
     return df.iloc[-1].to_dict()
 
 
-def _action_text(action: int, size: float) -> str:
+def _action_direction_text(action: int, size: float) -> str:
+    """Return combined action/direction string."""
     if action == 1:
-        return "开多" if size > 0 else "开空"
+        return "开多📈" if size > 0 else "开空🈳"
     if action == 2:
         return "平多" if size > 0 else "平空"
-    return str(action)
-
-
-def _direction_text(size: float) -> str:
-    return "做多📈" if size > 0 else "做空🈳"
+    return f"{action}{'多' if size > 0 else '空'}"
 
 
 def format_message(record: dict) -> str:
@@ -118,15 +115,14 @@ def format_message(record: dict) -> str:
         lev = f"{ep / (ep - lp):.1f}x"
     msg_lines = [
         "🚨🚨🚨 Hyperliquid大额开仓 🚨🚨🚨",
-        f"user = 开仓地址：https://hyperdash.info/zh-CN/trader/{record['user']}",
+        f"开仓地址：https://hyperdash.info/zh-CN/trader/{record['user']}",
         f"时间：{time_str}",
-        f"symbol = 标的：{record['symbol']}",
-        f"position action：{_action_text(record['position_action'], record['position_size'])}",
-        f"方向：{_direction_text(record['position_size'])}",
-        f"position size：{record['position_size']} 枚 {record['symbol']}",
-        f"entry_price：{record['entry_price']:.6f}",
-        f"liq_price：{record['liq_price']:.6f}",
-        f"position_value_usd：{record['position_value_usd']} USD",
+        f"标的：{record['symbol']}",
+        _action_direction_text(record['position_action'], record['position_size']),
+        f"仓位尺寸：{record['position_size']} 枚 {record['symbol']}",
+        f"仓位价值：{record['position_value_usd']} USD",
+        f"开仓价：{record['entry_price']:.6f}",
+        f"爆仓价：{record['liq_price']:.6f}",
         f"估算名义杠杆率 {lev}",
     ]
     return "\n".join(msg_lines)
@@ -143,9 +139,11 @@ def process_once(api_key: str) -> None:
         msgs = []
         for r in new_records:
             msg = format_message(r)
-            msgs.append(msg)
             log_msg(msg)
-        send_message("\n\n".join(msgs))
+            if r.get("position_value_usd", 0) >= 10_000_000:
+                msgs.append(msg)
+        if msgs:
+            send_message("\n\n".join(msgs))
     else:
         log_msg("无大户开仓数据")
         rec = last_record()
@@ -158,6 +156,9 @@ def main() -> None:
     if not api_key:
         print("CG_API_KEY is not configured")
         return
+
+    log_msg("Hyperliquid whale alert activated")
+    send_message("Hyperliquid whale alert activated")
 
     while True:
         try:
