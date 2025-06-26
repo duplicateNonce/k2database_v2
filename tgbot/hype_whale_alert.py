@@ -100,7 +100,7 @@ def _action_direction_text(action: int, size: float) -> str:
     if action == 1:
         return "操作：开多📈" if size > 0 else "操作：开空🈳"
     if action == 2:
-        return "平多⬇️" if size > 0 else "平空⬆️"
+        return "操作：平多⬇️" if size > 0 else "操作：平空⬆️"
     return f"操作：{action}{'多' if size > 0 else '空'}"
 
 
@@ -114,7 +114,7 @@ def format_message(record: dict) -> str:
     if ep is not None and lp is not None and ep != lp:
         lev = f"{ep / (ep - lp):.1f}x"
     msg_lines = [
-        "🚨🚨🚨 Hyperliquid大额开仓 🚨🚨🚨",
+        "🚨🚨🚨🚨 Hyperliquid 大额交易警报 🚨🚨🚨🚨",
         f"开仓地址：[{record['user']}](https://hyperdash.info/zh-CN/trader/{record['user']})",
         f"时间：{time_str}",
         f"标的：{record['symbol']}",
@@ -165,6 +165,7 @@ def main() -> None:
     rec = last_record()
     if rec:
         log_msg(format_message(rec))
+        send_message(f"测试推送\n{format_message(rec)}", parse_mode="Markdown")
 
     while True:
         try:
