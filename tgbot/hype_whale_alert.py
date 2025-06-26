@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -19,6 +20,21 @@ from config import CG_API_KEY, TZ_NAME
 
 CSV_FILE = Path("data/hyper_whale.csv")
 API_URL = "https://open-api-v4.coinglass.com/api/hyperliquid/whale-alert"
+LOG_FILE = "hyper_whale_alert.log"
+
+TZ = pytz.timezone(TZ_NAME)
+
+
+def log_msg(msg: str) -> None:
+    """Print and append ``msg`` to ``LOG_FILE`` with timestamp."""
+    ts = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{ts} {msg}"
+    print(line)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception as exc:
+        print("Failed to write log:", exc)
 
 
 def fetch_records(api_key: str) -> list[dict]:
@@ -36,25 +52,59 @@ def fetch_records(api_key: str) -> list[dict]:
     return data
 
 
-def update_csv(records: list[dict]) -> None:
-    """Append ``records`` to ``CSV_FILE`` avoiding duplicates."""
+def update_csv(records: list[dict]) -> list[dict]:
+    """Append ``records`` to ``CSV_FILE`` avoiding duplicates.
+
+    Returns the list of records that were newly inserted.
+    """
     if not records:
-        return
+        return []
+
     df_new = pd.DataFrame(records)
+
     if CSV_FILE.exists():
         try:
             df_old = pd.read_csv(CSV_FILE)
         except Exception:
             df_old = pd.DataFrame()
-        df_all = pd.concat([df_old, df_new], ignore_index=True)
-        df_all = df_all.drop_duplicates(
-            subset=["user", "create_time", "position_action"], keep="first"
+        key_old = set(
+            (
+                row.user,
+                row.create_time,
+                row.position_action,
+            )
+            for row in df_old.itertuples(index=False)
         )
     else:
-        df_all = df_new
+        df_old = pd.DataFrame()
+        key_old = set()
+
+    # Filter out records already present
+    new_mask = [
+        (r["user"], r["create_time"], r["position_action"]) not in key_old
+        for r in df_new.to_dict("records")
+    ]
+    df_insert = df_new[new_mask]
+
+    df_all = pd.concat([df_old, df_insert], ignore_index=True)
     df_all = df_all.sort_values("create_time")
     CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
     df_all.to_csv(CSV_FILE, index=False)
+
+    return df_insert.to_dict("records")
+
+
+def last_record() -> dict | None:
+    """Return the last record from ``CSV_FILE`` if available."""
+    if not CSV_FILE.exists():
+        return None
+    try:
+        df = pd.read_csv(CSV_FILE)
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    return df.iloc[-1].to_dict()
 
 
 def _action_text(action: int, size: float) -> str:
@@ -94,23 +144,41 @@ def format_message(record: dict) -> str:
     return "\n".join(msg_lines)
 
 
+def process_once(api_key: str) -> None:
+    """Fetch records, update CSV and handle notifications."""
+    records = fetch_records(api_key)
+    new_records = update_csv(records)
+
+    log_msg(f"写入{len(new_records)}条数据")
+
+    if new_records:
+        msgs = []
+        for r in new_records:
+            msg = format_message(r)
+            msgs.append(msg)
+            log_msg(msg)
+        send_message("\n\n".join(msgs))
+    else:
+        log_msg("无大户开仓数据")
+        rec = last_record()
+        if rec:
+            log_msg(format_message(rec))
+
+
 def main() -> None:
     api_key = CG_API_KEY
     if not api_key:
         print("CG_API_KEY is not configured")
         return
 
-    records = fetch_records(api_key)
-    if not records:
-        print("no records fetched")
-        return
+    send_message("Hyperliquid Whale Alert Activated")
 
-    update_csv(records)
-
-    last = records[-1]
-    if last.get("position_value_usd", 0) >= 10_000_000:
-        msg = format_message(last)
-        send_message(msg)
+    while True:
+        try:
+            process_once(api_key)
+        except Exception as exc:
+            log_msg(f"error: {exc}")
+        time.sleep(60)
 
 
 if __name__ == "__main__":
