@@ -53,38 +53,26 @@ def fetch_records(api_key: str) -> list[dict]:
 
 
 def update_csv(records: list[dict]) -> list[dict]:
-    """Append ``records`` to ``CSV_FILE`` avoiding duplicates.
+    """Append ``records`` to ``CSV_FILE`` if they are newer than existing ones.
 
-    Returns the list of records that were newly inserted.
-    """
+    Returns the list of records that were newly inserted."""
     if not records:
         return []
 
-    df_new = pd.DataFrame(records)
+    df_new = pd.DataFrame(records).sort_values("create_time")
 
     if CSV_FILE.exists():
         try:
             df_old = pd.read_csv(CSV_FILE)
+            last_ts = df_old["create_time"].max() if not df_old.empty else 0
         except Exception:
             df_old = pd.DataFrame()
-        key_old = set(
-            (
-                row.user,
-                row.create_time,
-                row.position_action,
-            )
-            for row in df_old.itertuples(index=False)
-        )
+            last_ts = 0
     else:
         df_old = pd.DataFrame()
-        key_old = set()
+        last_ts = 0
 
-    # Filter out records already present
-    new_mask = [
-        (r["user"], r["create_time"], r["position_action"]) not in key_old
-        for r in df_new.to_dict("records")
-    ]
-    df_insert = df_new[new_mask]
+    df_insert = df_new[df_new["create_time"] > last_ts]
 
     df_all = pd.concat([df_old, df_insert], ignore_index=True)
     df_all = df_all.sort_values("create_time")
@@ -129,7 +117,7 @@ def format_message(record: dict) -> str:
     if ep is not None and lp is not None and ep != lp:
         lev = f"{ep / (ep - lp):.1f}x"
     msg_lines = [
-        "\uD83D\uDEA8\uD83D\uDEA8\uD83D\uDEA8 Hyperliquid大额开仓 \uD83D\uDEA8\uD83D\uDEA8\uD83D\uDEA8",
+        "🚨🚨🚨 Hyperliquid大额开仓 🚨🚨🚨",
         f"user = 开仓地址：https://hyperdash.info/zh-CN/trader/{record['user']}",
         f"时间：{time_str}",
         f"symbol = 标的：{record['symbol']}",
@@ -170,8 +158,6 @@ def main() -> None:
     if not api_key:
         print("CG_API_KEY is not configured")
         return
-
-    send_message("Hyperliquid Whale Alert Activated")
 
     while True:
         try:
