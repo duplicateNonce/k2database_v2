@@ -129,7 +129,8 @@ def render_overview():
     time_left = refresh_time - now
     refresh_due = time_left.total_seconds() <= 0
 
-    interval = 1000 if time_left.total_seconds() <= 30 else 10_000
+    SA_SWITCH_SECONDS = 10
+    interval = 1000 if time_left.total_seconds() <= 30 else SA_SWITCH_SECONDS * 1000
     st_autorefresh(interval=interval, key="overview_timer")
 
     SLOT_INFO = [
@@ -175,8 +176,14 @@ def render_overview():
 
     if "sa_index" not in st.session_state:
         st.session_state["sa_index"] = 0
-    elif refresh_due:
+    if "next_switch_time" not in st.session_state:
+        st.session_state["next_switch_time"] = now + timedelta(seconds=SA_SWITCH_SECONDS)
+
+    switch_due = now >= st.session_state["next_switch_time"]
+
+    if switch_due:
         st.session_state["sa_index"] = (st.session_state["sa_index"] + 1) % len(SLOT_INFO)
+        st.session_state["next_switch_time"] = now + timedelta(seconds=SA_SWITCH_SECONDS)
 
     vol_label = st.session_state.get("vol_label", "")
 
