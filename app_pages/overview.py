@@ -7,6 +7,7 @@ from pathlib import Path
 from utils import safe_rerun
 from config import TZ_NAME
 from tgbot.time_vol_alert import last_hour_label
+from tgbot.time_strong_asset import last_4h_range
 from sqlalchemy import text
 from result_cache import load_cached, save_cached
 from strategies.strong_assets import compute_period_metrics
@@ -109,6 +110,13 @@ def _latest_volume_alert() -> tuple[str, pd.DataFrame]:
     df = _read_latest("overview_vol")
     return label, df
 
+
+def _latest_sa4h() -> tuple[str, pd.DataFrame]:
+    """Return label and cached dataframe for the latest 4h strong assets."""
+    _, _, label = last_4h_range()
+    df = _read_latest("overview_sa")
+    return f"最近4h（{label}）强势标的", df
+
 def render_overview():
     st.title("Dashboard")
 
@@ -130,8 +138,7 @@ def render_overview():
     refresh_due = time_left.total_seconds() <= 0
 
     SA_SWITCH_SECONDS = 10
-    interval = 1000 if time_left.total_seconds() <= 30 else SA_SWITCH_SECONDS * 1000
-    st_autorefresh(interval=interval, key="overview_timer")
+    st_autorefresh(interval=1000, key="overview_timer")
 
     SLOT_INFO = [
         (4, 8, "美股收盘强势标的"),
@@ -145,6 +152,9 @@ def render_overview():
             s_ts, e_ts, label = _slot_range(now, start_h, end_h)
             df = _load_slot_df(s_ts, e_ts)
             results.append((f"{label} {title}", df))
+        sa4h_label, sa4h_df = _latest_sa4h()
+        if not sa4h_df.empty:
+            results.append((sa4h_label, sa4h_df))
         return results
 
     def manual_refresh() -> None:
@@ -180,9 +190,10 @@ def render_overview():
         st.session_state["next_switch_time"] = now + timedelta(seconds=SA_SWITCH_SECONDS)
 
     switch_due = now >= st.session_state["next_switch_time"]
+    slots_len = len(st.session_state["sa_slots"])
 
-    if switch_due:
-        st.session_state["sa_index"] = (st.session_state["sa_index"] + 1) % len(SLOT_INFO)
+    if switch_due and slots_len:
+        st.session_state["sa_index"] = (st.session_state["sa_index"] + 1) % slots_len
         st.session_state["next_switch_time"] = now + timedelta(seconds=SA_SWITCH_SECONDS)
 
     vol_label = st.session_state.get("vol_label", "")
@@ -191,6 +202,9 @@ def render_overview():
     with col1:
         sa_label, sa_df = st.session_state["sa_slots"][st.session_state["sa_index"]]
         st.markdown(f"**{sa_label}**")
+        switch_left = (st.session_state["next_switch_time"] - now).total_seconds()
+        progress = 1.0 - max(0.0, min(SA_SWITCH_SECONDS, switch_left)) / SA_SWITCH_SECONDS
+        st.progress(progress)
         st.dataframe(sa_df, use_container_width=True)
     with col2:
         st.markdown(f"**{vol_label} 成交量异动 (24h均量)**")
